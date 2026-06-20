@@ -45,6 +45,7 @@ export function PluginListTable({
                   <td className="px-4 py-4">
                     <Link
                       href={`/plugins/${plugin.slug}`}
+                      prefetch={false}
                       className="group flex min-w-0 items-center gap-2"
                     >
                       <PluginIcon plugin={plugin} size="xs" />

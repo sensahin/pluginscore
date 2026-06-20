@@ -2,12 +2,16 @@
 
 import { Loader2, Search, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { FormEvent, KeyboardEvent, useId, useMemo, useState } from "react";
+import type { FormEvent, KeyboardEvent } from "react";
+import { useId, useMemo, useState } from "react";
 import {
   normalizePluginSubmissionInput,
   submitPluginForScan,
 } from "@/lib/plugin-submission";
-import type { PluginSuggestion } from "@/lib/plugin-suggestions";
+import {
+  getRankedPluginSuggestions,
+  type PluginSuggestion,
+} from "@/lib/plugin-suggestions";
 import { usePluginSuggestions } from "@/lib/use-plugin-suggestions";
 
 type SearchPlugin = PluginSuggestion;
@@ -21,6 +25,7 @@ export function PluginSearch({
 }) {
   const router = useRouter();
   const listboxId = useId();
+  const inputId = `${listboxId}-input`;
   const [query, setQuery] = useState(initialQuery);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
@@ -33,7 +38,7 @@ export function PluginSearch({
   } = usePluginSuggestions(query);
   const submissionSlug = normalizePluginSubmissionInput(trimmedQuery);
   const localSuggestions = useMemo(
-    () => getSuggestions(plugins, trimmedQuery).slice(0, 8),
+    () => getRankedPluginSuggestions(plugins, trimmedQuery),
     [plugins, trimmedQuery],
   );
   const suggestions = remoteSuggestions ?? localSuggestions;
@@ -44,10 +49,15 @@ export function PluginSearch({
           [plugin.name.trim().toLowerCase(), plugin.slug],
           [plugin.slug.trim().toLowerCase(), plugin.slug],
         ]),
-      ),
+    ),
     [plugins, suggestions],
   );
-  const highlightedPlugin = suggestions[highlightedIndex] ?? suggestions[0];
+  const safeHighlightedIndex =
+    suggestions.length > 0
+      ? Math.min(highlightedIndex, suggestions.length - 1)
+      : -1;
+  const highlightedPlugin =
+    safeHighlightedIndex >= 0 ? suggestions[safeHighlightedIndex] : undefined;
   const showSuggestions = isPanelOpen && trimmedQuery.length > 0 && suggestions.length > 0;
   const showSubmitAction =
     isPanelOpen &&
@@ -57,6 +67,11 @@ export function PluginSearch({
     !isLoadingSuggestions &&
     submissionSlug.length > 0;
   const showPanel = showSuggestions || showSubmitAction;
+  const activeDescendantId = showSuggestions
+    ? `${listboxId}-option-${safeHighlightedIndex}`
+    : showSubmitAction
+      ? `${listboxId}-submit`
+      : undefined;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -84,20 +99,49 @@ export function PluginSearch({
       return;
     }
 
-    if (!showSuggestions) {
+    if (event.key === "Enter" && (showSuggestions || showSubmitAction)) {
+      event.preventDefault();
+
+      if (highlightedPlugin) {
+        navigateToPlugin(highlightedPlugin.slug);
+        return;
+      }
+
+      if (showSubmitAction) {
+        void submitFromWordPress();
+      }
+
       return;
     }
 
     if (event.key === "ArrowDown") {
+      if (!showSuggestions) return;
       event.preventDefault();
       setHighlightedIndex((index) => Math.min(index + 1, suggestions.length - 1));
+      setIsPanelOpen(true);
+      return;
     }
 
     if (event.key === "ArrowUp") {
+      if (!showSuggestions) return;
       event.preventDefault();
       setHighlightedIndex((index) => Math.max(index - 1, 0));
+      setIsPanelOpen(true);
+      return;
     }
 
+    if (event.key === "Home") {
+      if (!showSuggestions) return;
+      event.preventDefault();
+      setHighlightedIndex(0);
+      return;
+    }
+
+    if (event.key === "End") {
+      if (!showSuggestions) return;
+      event.preventDefault();
+      setHighlightedIndex(suggestions.length - 1);
+    }
   }
 
   function navigateToPlugin(slug: string) {
@@ -144,7 +188,7 @@ export function PluginSearch({
       onSubmit={handleSubmit}
       className="relative w-full"
     >
-      <label className="sr-only" htmlFor="plugin-search">
+      <label className="sr-only" htmlFor={inputId}>
         Search plugins
       </label>
       <div className="relative min-w-0">
@@ -154,19 +198,14 @@ export function PluginSearch({
           aria-hidden="true"
         />
         <input
-          id="plugin-search"
+          id={inputId}
           value={query}
           role="combobox"
           aria-autocomplete="list"
-          aria-controls={listboxId}
+          aria-controls={showPanel ? listboxId : undefined}
+          aria-haspopup="listbox"
           aria-expanded={showPanel}
-          aria-activedescendant={
-            showSuggestions
-              ? `${listboxId}-${highlightedIndex}`
-              : showSubmitAction
-                ? `${listboxId}-submit`
-                : undefined
-          }
+          aria-activedescendant={activeDescendantId}
           autoComplete="off"
           spellCheck={false}
           onFocus={() => setIsPanelOpen(true)}
@@ -201,21 +240,22 @@ export function PluginSearch({
         <div
           id={listboxId}
           role="listbox"
+          aria-label="Plugin suggestions"
           className="absolute left-0 right-0 top-full z-30 mt-2 max-h-80 overflow-auto rounded-md border border-line bg-surface py-2 text-left shadow-lg"
         >
           {showSuggestions
             ? suggestions.map((plugin, index) => (
                 <button
                   key={plugin.slug}
-                  id={`${listboxId}-${index}`}
+                  id={`${listboxId}-option-${index}`}
                   type="button"
                   role="option"
-                  aria-selected={index === highlightedIndex}
+                  aria-selected={index === safeHighlightedIndex}
                   onMouseDown={(event) => event.preventDefault()}
                   onMouseEnter={() => setHighlightedIndex(index)}
                   onClick={() => navigateToPlugin(plugin.slug)}
                   className={`flex w-full min-w-0 items-center justify-between gap-4 px-4 py-3 text-left transition ${
-                    index === highlightedIndex ? "bg-surface-subtle" : "hover:bg-surface-subtle"
+                    index === safeHighlightedIndex ? "bg-surface-subtle" : "hover:bg-surface-subtle"
                   }`}
                 >
                   <span className="min-w-0 truncate font-medium">{plugin.name}</span>
@@ -275,66 +315,4 @@ function normalizePluginSlug(value: string) {
     .replace(/\/$/, "")
     .replace(/[^a-z0-9-]+/g, "-")
     .replace(/^-+|-+$/g, "");
-}
-
-function getSuggestions(plugins: SearchPlugin[], query: string) {
-  const normalizedQuery = normalizeSearchText(query);
-
-  if (!normalizedQuery) {
-    return [];
-  }
-
-  return plugins
-    .map((plugin) => ({
-      plugin,
-      rank: matchRank(plugin, normalizedQuery),
-    }))
-    .filter((match) => match.rank < 3)
-    .sort((a, b) => {
-      if (a.rank !== b.rank) return a.rank - b.rank;
-      return comparePluginSuggestionRank(a.plugin, b.plugin);
-    })
-    .map((match) => match.plugin);
-}
-
-function matchRank(plugin: SearchPlugin, query: string) {
-  const name = normalizeSearchText(plugin.name);
-  const slug = normalizeSearchText(plugin.slug);
-
-  if (name.startsWith(query) || slug.startsWith(query)) return 0;
-  if (query.length > 1 && (name.includes(query) || slug.includes(query))) return 1;
-
-  return 3;
-}
-
-function comparePluginSuggestionRank(a: SearchPlugin, b: SearchPlugin) {
-  return (
-    parseCompact(b.activeInstalls) - parseCompact(a.activeInstalls) ||
-    (b.ratingCount ?? 0) - (a.ratingCount ?? 0) ||
-    (b.rating ?? 0) - (a.rating ?? 0) ||
-    Date.parse(b.lastUpdated || "") - Date.parse(a.lastUpdated || "") ||
-    b.score - a.score ||
-    parseCompact(b.downloads) - parseCompact(a.downloads) ||
-    a.name.localeCompare(b.name)
-  );
-}
-
-function normalizeSearchText(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function parseCompact(value: string) {
-  const normalized = value.toLowerCase().replace("+", "").trim();
-  const parsed = Number.parseFloat(normalized);
-
-  if (!Number.isFinite(parsed)) return 0;
-  if (normalized.endsWith("m")) return parsed * 1_000_000;
-  if (normalized.endsWith("k")) return parsed * 1_000;
-
-  return parsed;
 }

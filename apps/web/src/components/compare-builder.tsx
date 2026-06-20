@@ -2,15 +2,18 @@
 
 import { ArrowRight, Plus, Search, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import type { KeyboardEvent } from "react";
+import { useId, useMemo, useState } from "react";
 import {
   canonicalComparePath,
   MAX_COMPARE_PLUGINS,
   MIN_COMPARE_PLUGINS,
   normalizePluginSlug,
-  parseCompactNumber,
 } from "@/lib/compare";
-import type { PluginSuggestion } from "@/lib/plugin-suggestions";
+import {
+  getRankedPluginSuggestions,
+  type PluginSuggestion,
+} from "@/lib/plugin-suggestions";
 import { usePluginSuggestions } from "@/lib/use-plugin-suggestions";
 
 type ComparePlugin = PluginSuggestion;
@@ -23,7 +26,11 @@ export function CompareBuilder({
   initialSlugs?: string[];
 }) {
   const router = useRouter();
+  const listboxId = useId();
+  const inputId = `${listboxId}-input`;
   const [query, setQuery] = useState("");
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [selectedSlugs, setSelectedSlugs] = useState(() =>
     initialSlugs
       .map(normalizePluginSlug)
@@ -37,7 +44,7 @@ export function CompareBuilder({
     trimmedQuery,
   } = usePluginSuggestions(query);
   const localSuggestions = useMemo(
-    () => getSuggestions(plugins, trimmedQuery),
+    () => getRankedPluginSuggestions(plugins, trimmedQuery),
     [plugins, trimmedQuery],
   );
   const suggestions = useMemo(
@@ -61,6 +68,21 @@ export function CompareBuilder({
   });
   const canAddMore = selectedSlugs.length < MAX_COMPARE_PLUGINS;
   const canCompare = selectedSlugs.length >= MIN_COMPARE_PLUGINS;
+  const safeHighlightedIndex =
+    suggestions.length > 0
+      ? Math.min(highlightedIndex, suggestions.length - 1)
+      : -1;
+  const highlightedPlugin =
+    safeHighlightedIndex >= 0 ? suggestions[safeHighlightedIndex] : undefined;
+  const showSuggestions =
+    canAddMore && isPanelOpen && trimmedQuery.length > 0 && suggestions.length > 0;
+  const showEmptyState =
+    canAddMore &&
+    isPanelOpen &&
+    trimmedQuery.length > 0 &&
+    remoteSuggestions !== null &&
+    !isLoadingSuggestions &&
+    suggestions.length === 0;
 
   function addPlugin(slug: string) {
     if (!canAddMore || selectedSlugs.includes(slug)) {
@@ -78,6 +100,8 @@ export function CompareBuilder({
 
     setSelectedSlugs((current) => [...current, slug].slice(0, MAX_COMPARE_PLUGINS));
     setQuery("");
+    setHighlightedIndex(0);
+    setIsPanelOpen(false);
   }
 
   function removePlugin(slug: string) {
@@ -90,6 +114,46 @@ export function CompareBuilder({
     }
 
     router.push(canonicalComparePath(selectedSlugs));
+  }
+
+  function handleSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Escape") {
+      setIsPanelOpen(false);
+      return;
+    }
+
+    if (event.key === "Enter" && showSuggestions && highlightedPlugin) {
+      event.preventDefault();
+      addPlugin(highlightedPlugin.slug);
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      if (!showSuggestions) return;
+      event.preventDefault();
+      setHighlightedIndex((index) => Math.min(index + 1, suggestions.length - 1));
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      if (!showSuggestions) return;
+      event.preventDefault();
+      setHighlightedIndex((index) => Math.max(index - 1, 0));
+      return;
+    }
+
+    if (event.key === "Home") {
+      if (!showSuggestions) return;
+      event.preventDefault();
+      setHighlightedIndex(0);
+      return;
+    }
+
+    if (event.key === "End") {
+      if (!showSuggestions) return;
+      event.preventDefault();
+      setHighlightedIndex(suggestions.length - 1);
+    }
   }
 
   return (
@@ -134,27 +198,58 @@ export function CompareBuilder({
 
         {canAddMore ? (
           <div className="relative">
+            <label className="sr-only" htmlFor={inputId}>
+              Search plugin to add
+            </label>
             <Search
               size={18}
               className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted"
               aria-hidden="true"
             />
             <input
+              id={inputId}
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              role="combobox"
+              aria-autocomplete="list"
+              aria-controls={showSuggestions ? listboxId : undefined}
+              aria-haspopup="listbox"
+              aria-expanded={showSuggestions}
+              aria-activedescendant={
+                showSuggestions ? `${listboxId}-option-${safeHighlightedIndex}` : undefined
+              }
+              onFocus={() => setIsPanelOpen(true)}
+              onBlur={() => setIsPanelOpen(false)}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setHighlightedIndex(0);
+                setIsPanelOpen(true);
+              }}
+              onKeyDown={handleSearchKeyDown}
               className="h-12 w-full rounded-md border border-line bg-background pl-11 pr-4 text-sm font-medium outline-none transition placeholder:text-muted focus:border-brand"
               placeholder="Search plugin to add"
               autoComplete="off"
               spellCheck={false}
             />
-            {trimmedQuery && suggestions.length > 0 ? (
-              <div className="absolute left-0 right-0 top-full z-20 mt-2 max-h-80 overflow-auto rounded-md border border-line bg-surface py-2 shadow-lg">
-                {suggestions.map((plugin) => (
+            {showSuggestions ? (
+              <div
+                id={listboxId}
+                role="listbox"
+                aria-label="Plugins to compare"
+                className="absolute left-0 right-0 top-full z-20 mt-2 max-h-80 overflow-auto rounded-md border border-line bg-surface py-2 shadow-lg"
+              >
+                {suggestions.map((plugin, index) => (
                   <button
                     key={plugin.slug}
+                    id={`${listboxId}-option-${index}`}
                     type="button"
+                    role="option"
+                    aria-selected={index === safeHighlightedIndex}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onMouseEnter={() => setHighlightedIndex(index)}
                     onClick={() => addPlugin(plugin.slug)}
-                    className="flex w-full min-w-0 items-center justify-between gap-4 px-4 py-3 text-left text-sm transition hover:bg-surface-subtle"
+                    className={`flex w-full min-w-0 items-center justify-between gap-4 px-4 py-3 text-left text-sm transition ${
+                      index === safeHighlightedIndex ? "bg-surface-subtle" : "hover:bg-surface-subtle"
+                    }`}
                   >
                     <span className="min-w-0 truncate font-medium">{plugin.name}</span>
                     <span className="shrink-0 font-mono text-xs text-muted">
@@ -167,7 +262,7 @@ export function CompareBuilder({
           </div>
         ) : null}
 
-        {trimmedQuery && remoteSuggestions !== null && !isLoadingSuggestions && suggestions.length === 0 ? (
+        {showEmptyState ? (
           <div className="rounded-md border border-dashed border-line p-4 text-sm text-muted">
             No indexed plugin matched that search.
           </div>
@@ -182,53 +277,4 @@ export function CompareBuilder({
       </div>
     </div>
   );
-}
-
-function getSuggestions(plugins: ComparePlugin[], query: string) {
-  const normalizedQuery = normalizeSearchText(query);
-
-  if (!normalizedQuery) {
-    return [];
-  }
-
-  return plugins
-    .map((plugin) => ({
-      plugin,
-      rank: matchRank(plugin, normalizedQuery),
-    }))
-    .filter((match) => match.rank < 3)
-    .sort((a, b) => {
-      if (a.rank !== b.rank) return a.rank - b.rank;
-      return comparePluginSuggestionRank(a.plugin, b.plugin);
-    })
-    .map((match) => match.plugin);
-}
-
-function matchRank(plugin: ComparePlugin, query: string) {
-  const name = normalizeSearchText(plugin.name);
-  const slug = normalizeSearchText(plugin.slug);
-
-  if (name.startsWith(query) || slug.startsWith(query)) return 0;
-  if (query.length > 1 && (name.includes(query) || slug.includes(query))) return 1;
-
-  return 3;
-}
-
-function comparePluginSuggestionRank(a: ComparePlugin, b: ComparePlugin) {
-  return (
-    parseCompactNumber(b.activeInstalls) - parseCompactNumber(a.activeInstalls) ||
-    (b.ratingCount ?? 0) - (a.ratingCount ?? 0) ||
-    (b.rating ?? 0) - (a.rating ?? 0) ||
-    Date.parse(b.lastUpdated || "") - Date.parse(a.lastUpdated || "") ||
-    b.score - a.score ||
-    a.name.localeCompare(b.name)
-  );
-}
-
-function normalizeSearchText(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\s+/g, " ");
 }

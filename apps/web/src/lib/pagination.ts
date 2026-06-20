@@ -17,26 +17,3 @@ export function pageFromSegment(value?: string) {
 export function titleWithPage(title: string, page: number) {
   return page > 1 ? `${title} - Page ${page}` : title;
 }
-
-export function canonicalPath(
-  basePath: string,
-  page: number,
-  params: Record<string, string | number | boolean | undefined> = {},
-) {
-  const query = new URLSearchParams();
-
-  Object.entries(params).forEach(([key, value]) => {
-    if (value === undefined || value === "" || value === false) {
-      return;
-    }
-
-    query.set(key, String(value));
-  });
-
-  if (page > 1) {
-    query.set("page", String(page));
-  }
-
-  const queryString = query.toString();
-  return queryString ? `${basePath}?${queryString}` : basePath;
-}

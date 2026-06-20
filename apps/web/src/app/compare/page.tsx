@@ -7,6 +7,7 @@ import {
   isValidComparison,
   parseComparisonQuery,
 } from "@/lib/compare";
+import { LOCAL_PLUGIN_SUGGESTION_LIMIT } from "@/lib/plugin-suggestions";
 import { seoMetadata } from "@/lib/seo";
 
 type ComparePageProps = {
@@ -32,7 +33,10 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
     redirect(canonicalComparePath(requestedSlugs));
   }
 
-  const plugins = await getPlugins({ limit: 500, sort: "installs_desc" });
+  const plugins = await getPlugins({
+    limit: LOCAL_PLUGIN_SUGGESTION_LIMIT,
+    sort: "installs_desc",
+  });
 
   return (
     <AppShell>

@@ -27,6 +27,7 @@ export function TagChips({
         <Link
           key={tag.slug}
           href={`/tags/${encodeURIComponent(tag.slug)}`}
+          prefetch={false}
           className={className}
         >
           {tag.name}

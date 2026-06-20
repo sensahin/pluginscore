@@ -50,6 +50,7 @@ export function PluginHighlightList({
                   <div className="flex min-w-0 items-center gap-2">
                     <Link
                       href={`/plugins/${plugin.slug}`}
+                      prefetch={false}
                       className="truncate font-semibold text-info hover:underline"
                     >
                       {plugin.name}

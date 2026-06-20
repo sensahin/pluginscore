@@ -12,6 +12,7 @@ import { PluginTabbedList } from "@/components/plugin-tabbed-list";
 import { TagChips } from "@/components/tag-chips";
 import { getPlugins } from "@/lib/api";
 import { scoreDelta, type PluginSummary } from "@/lib/plugin-score-data";
+import { LOCAL_PLUGIN_SUGGESTION_LIMIT } from "@/lib/plugin-suggestions";
 import { seoMetadata } from "@/lib/seo";
 
 export const metadata = seoMetadata({
@@ -33,7 +34,7 @@ export default async function Home() {
     mostIssues,
     needsReview,
   ] = await Promise.all([
-    getPlugins({ limit: 500, sort: "installs_desc" }),
+    getPlugins({ limit: LOCAL_PLUGIN_SUGGESTION_LIMIT, sort: "installs_desc" }),
     getPlugins({ limit: 12, sort: "score_desc", audited: true }),
     getPlugins({ limit: 12, sort: "installs_desc" }),
     getPlugins({ limit: 12, sort: "scanned_desc", audited: true }),
@@ -118,6 +119,7 @@ function PluginCard({ plugin }: { plugin: PluginSummary }) {
       <div className="mt-5 min-w-0">
         <Link
           href={`/plugins/${plugin.slug}`}
+          prefetch={false}
           className="line-clamp-2 text-lg font-semibold leading-6 text-info hover:underline"
         >
           {plugin.name}

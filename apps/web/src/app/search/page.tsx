@@ -8,6 +8,7 @@ import { PluginSubmissionAction } from "@/components/plugin-submission-action";
 import { getPlugins, getPluginsPage } from "@/lib/api";
 import { normalizePageParam, PLUGIN_DIRECTORY_PER_PAGE } from "@/lib/pagination";
 import type { PluginSummary } from "@/lib/plugin-score-data";
+import { LOCAL_PLUGIN_SUGGESTION_LIMIT } from "@/lib/plugin-suggestions";
 import { seoMetadata } from "@/lib/seo";
 
 type SearchPageProps = {
@@ -43,7 +44,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           query,
         })
       : Promise.resolve(null),
-    getPlugins({ limit: 500, sort: "installs_desc" }),
+    getPlugins({ limit: LOCAL_PLUGIN_SUGGESTION_LIMIT, sort: "installs_desc" }),
   ]);
 
   return (
