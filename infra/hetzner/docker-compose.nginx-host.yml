@@ -1,0 +1,38 @@
+services:
+  postgres:
+    deploy:
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 640m
+
+  scanner-db:
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 384m
+
+  api:
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 384m
+
+  caddy:
+    profiles: ["caddy"]
+
+  scanner:
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 1200m
+
+  scheduler:
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256m
