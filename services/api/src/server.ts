@@ -21,6 +21,7 @@ const listPluginsQuery = z.object({
       "scanned_desc",
       "issues_desc",
       "delta_desc",
+      "relevance_desc",
     ])
     .default("score_desc"),
   audited: z.enum(["true", "false"]).optional().transform((value) => value === "true"),

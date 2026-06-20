@@ -240,7 +240,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [score_desc, score_asc, downloads_desc, installs_desc, updated_desc, scanned_desc, issues_desc, delta_desc]
+            enum: [score_desc, score_asc, downloads_desc, installs_desc, updated_desc, scanned_desc, issues_desc, delta_desc, relevance_desc]
         - name: audited
           in: query
           schema:

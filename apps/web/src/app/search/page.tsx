@@ -39,7 +39,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       ? getPluginsPage({
           page,
           perPage: PLUGIN_DIRECTORY_PER_PAGE,
-          sort: "downloads_desc",
+          sort: "relevance_desc",
           query,
         })
       : Promise.resolve(null),

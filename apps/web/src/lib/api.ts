@@ -29,7 +29,8 @@ type PluginSort =
   | "updated_desc"
   | "scanned_desc"
   | "issues_desc"
-  | "delta_desc";
+  | "delta_desc"
+  | "relevance_desc";
 type TagSort = "score_desc" | "installs_desc" | "scanned_desc" | "issues_desc";
 type PluginsPageOptions = {
   page?: number;
@@ -284,8 +285,13 @@ async function fetchFromApi<T>(
   }
 }
 
-function sortSamplePlugins(plugins: PluginDetail[], sort: PluginSort) {
+function sortSamplePlugins(plugins: PluginDetail[], sort: PluginSort, query?: string) {
+  const normalizedQuery = normalizeSearchText(query ?? "");
+
   return [...plugins].sort((a, b) => {
+    if (sort === "relevance_desc" && normalizedQuery) {
+      return pluginRelevanceRank(a, normalizedQuery) - pluginRelevanceRank(b, normalizedQuery) || comparePluginPopularity(a, b);
+    }
     if (sort === "score_asc") return a.score - b.score;
     if (sort === "issues_desc") return b.findings - a.findings;
     if (sort === "installs_desc") return parseCompact(b.activeInstalls) - parseCompact(a.activeInstalls);
@@ -306,7 +312,7 @@ function buildPluginsFallback({
   issueCode,
   issueFamily,
 }: Required<Pick<PluginsPageOptions, "sort">> & Omit<PluginsPageOptions, "page" | "perPage" | "sort">) {
-  const normalizedQuery = query?.trim().toLowerCase();
+  const normalizedQuery = normalizeSearchText(query ?? "");
   const normalizedAuthor = author?.trim().toLowerCase();
   const normalizedIssueFamily = issueFamily?.trim().toLowerCase();
   const normalizedIssueCode = issueCode?.trim();
@@ -320,6 +326,7 @@ function buildPluginsFallback({
       .filter((plugin) => !normalizedIssueCode || plugin.findings > 0)
       .filter((plugin) => !normalizedIssueFamily || plugin.findings > 0),
     sort,
+    query,
   );
 }
 
@@ -508,11 +515,61 @@ function parseCompact(value: string) {
 }
 
 function pluginMatches(plugin: PluginSummary, query: string) {
+  return searchablePluginValues(plugin).some((value) => value.includes(query));
+}
+
+function pluginRelevanceRank(plugin: PluginSummary, query: string) {
+  const name = normalizeSearchText(plugin.name);
+  const slug = normalizeSearchText(plugin.slug);
+  const author = normalizeSearchText(plugin.author ?? "");
+  const description = normalizeSearchText(plugin.shortDescription ?? "");
+  const tags = (plugin.tags ?? []).flatMap((tag) => [
+    normalizeSearchText(tag.name),
+    normalizeSearchText(tag.slug),
+  ]);
+
+  if (name === query) return 0;
+  if (slug === query) return 1;
+  if (name.startsWith(query)) return 2;
+  if (slug.startsWith(query)) return 3;
+  if (tags.some((tag) => tag === query)) return 4;
+  if (tags.some((tag) => tag.startsWith(query))) return 5;
+  if (name.includes(query)) return 6;
+  if (slug.includes(query)) return 7;
+  if (author.startsWith(query)) return 8;
+  if (tags.some((tag) => tag.includes(query))) return 9;
+  if (description.includes(query)) return 10;
+
+  return 11;
+}
+
+function comparePluginPopularity(a: PluginSummary, b: PluginSummary) {
+  return (
+    parseCompact(b.activeInstalls) - parseCompact(a.activeInstalls) ||
+    parseCompact(b.downloads) - parseCompact(a.downloads) ||
+    (b.ratingCount ?? 0) - (a.ratingCount ?? 0) ||
+    (b.rating ?? 0) - (a.rating ?? 0) ||
+    b.lastUpdated.localeCompare(a.lastUpdated) ||
+    b.score - a.score ||
+    a.slug.localeCompare(b.slug)
+  );
+}
+
+function searchablePluginValues(plugin: PluginSummary) {
   return [
     plugin.slug,
     plugin.name,
     plugin.shortDescription,
     plugin.author,
     ...(plugin.tags ?? []).flatMap((tag) => [tag.slug, tag.name]),
-  ].some((value) => value?.toLowerCase().includes(query));
+  ].map((value) => normalizeSearchText(value ?? ""));
+}
+
+function normalizeSearchText(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }

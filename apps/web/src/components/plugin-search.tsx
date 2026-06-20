@@ -7,19 +7,10 @@ import {
   normalizePluginSubmissionInput,
   submitPluginForScan,
 } from "@/lib/plugin-submission";
-import type { PluginSummary } from "@/lib/plugin-score-data";
+import type { PluginSuggestion } from "@/lib/plugin-suggestions";
+import { usePluginSuggestions } from "@/lib/use-plugin-suggestions";
 
-type SearchPlugin = Pick<
-  PluginSummary,
-  | "slug"
-  | "name"
-  | "activeInstalls"
-  | "downloads"
-  | "lastUpdated"
-  | "rating"
-  | "ratingCount"
-  | "score"
->;
+type SearchPlugin = PluginSuggestion;
 
 export function PluginSearch({
   plugins,
@@ -35,21 +26,26 @@ export function PluginSearch({
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionError, setSubmissionError] = useState("");
-  const trimmedQuery = query.trim();
+  const {
+    items: remoteSuggestions,
+    isLoading: isLoadingSuggestions,
+    trimmedQuery,
+  } = usePluginSuggestions(query);
   const submissionSlug = normalizePluginSubmissionInput(trimmedQuery);
+  const localSuggestions = useMemo(
+    () => getSuggestions(plugins, trimmedQuery).slice(0, 8),
+    [plugins, trimmedQuery],
+  );
+  const suggestions = remoteSuggestions ?? localSuggestions;
   const pluginsByKey = useMemo(
     () =>
       new Map(
-        plugins.flatMap((plugin) => [
+        [...plugins, ...suggestions].flatMap((plugin) => [
           [plugin.name.trim().toLowerCase(), plugin.slug],
           [plugin.slug.trim().toLowerCase(), plugin.slug],
         ]),
       ),
-    [plugins],
-  );
-  const suggestions = useMemo(
-    () => getSuggestions(plugins, trimmedQuery).slice(0, 8),
-    [plugins, trimmedQuery],
+    [plugins, suggestions],
   );
   const highlightedPlugin = suggestions[highlightedIndex] ?? suggestions[0];
   const showSuggestions = isPanelOpen && trimmedQuery.length > 0 && suggestions.length > 0;
@@ -57,6 +53,8 @@ export function PluginSearch({
     isPanelOpen &&
     trimmedQuery.length > 0 &&
     suggestions.length === 0 &&
+    remoteSuggestions !== null &&
+    !isLoadingSuggestions &&
     submissionSlug.length > 0;
   const showPanel = showSuggestions || showSubmitAction;
 

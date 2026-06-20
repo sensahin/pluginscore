@@ -45,6 +45,7 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
             slug: plugin.slug,
             name: plugin.name,
             activeInstalls: plugin.activeInstalls,
+            downloads: plugin.downloads,
             rating: plugin.rating,
             ratingCount: plugin.ratingCount,
             lastUpdated: plugin.lastUpdated,

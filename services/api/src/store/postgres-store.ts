@@ -79,7 +79,8 @@ export class PostgresStore implements PluginScoreStore {
   async listPlugins(options: ListPluginsOptions): Promise<PaginatedResult<PluginSummary>> {
     const page = Math.max(1, options.page);
     const perPage = Math.max(1, options.perPage);
-    const searchPattern = options.query ? `%${escapeLikePattern(options.query.trim())}%` : null;
+    const rawSearchQuery = options.query?.trim() || null;
+    const searchPattern = rawSearchQuery ? `%${escapeLikePattern(rawSearchQuery)}%` : null;
     const tagSlug = options.tag ? normalizeTagSlug(options.tag) : null;
     const authorName = options.author?.trim() || null;
     const issueCode = options.issueCode?.trim() || null;
@@ -98,16 +99,6 @@ export class PostgresStore implements PluginScoreStore {
       return this.listRankedPlugins(rankingKey, page, perPage);
     }
 
-    const orderBy = {
-      score_desc: "coalesce(pcs.score, 0) desc, p.slug asc",
-      score_asc: "coalesce(pcs.score, 0) asc, p.slug asc",
-      downloads_desc: "coalesce(p.downloads, 0) desc, p.slug asc",
-      installs_desc: "coalesce(p.active_installs, 0) desc, p.slug asc",
-      updated_desc: "p.last_updated_at desc nulls last, p.slug asc",
-      scanned_desc: "pcs.scanned_at desc nulls last, p.slug asc",
-      issues_desc: "coalesce(pcs.total_findings, 0) desc, p.slug asc",
-      delta_desc: "(coalesce(pcs.score, 0) - coalesce(pcs.previous_score, pcs.score, 0)) desc, p.slug asc",
-    }[options.sort];
     const values: unknown[] = [];
     const where = this.buildPluginListWhere({
       values,
@@ -128,6 +119,7 @@ export class PostgresStore implements PluginScoreStore {
       values,
     );
     const total = Number(countResult.rows[0]?.total ?? 0);
+    const orderBy = pluginListOrderBy(options.sort, rawSearchQuery, values);
     const limitParam = values.push(perPage);
     const offsetParam = values.push((page - 1) * perPage);
     const result = await this.pool.query(
@@ -1523,6 +1515,82 @@ function rankSnapshotKeyForSort(sort: ListPluginsOptions["sort"]) {
     issues_desc: "most-issues",
     delta_desc: "most-improved",
     updated_desc: undefined,
+    relevance_desc: undefined,
+  }[sort];
+}
+
+function pluginListOrderBy(
+  sort: ListPluginsOptions["sort"],
+  rawSearchQuery: string | null,
+  values: unknown[],
+) {
+  if (sort === "relevance_desc" && rawSearchQuery) {
+    const escapedQuery = escapeLikePattern(rawSearchQuery);
+    const exactParam = values.push(rawSearchQuery);
+    const prefixParam = values.push(`${escapedQuery}%`);
+    const containsParam = values.push(`%${escapedQuery}%`);
+
+    return `
+      case
+        when lower(p.name) = lower($${exactParam}) then 0
+        when lower(p.slug) = lower($${exactParam}) then 1
+        when p.name ilike $${prefixParam} escape '\\' then 2
+        when p.slug ilike $${prefixParam} escape '\\' then 3
+        when exists (
+          select 1
+          from plugin_tags relevance_exact_pt
+          join tags relevance_exact_t on relevance_exact_t.id = relevance_exact_pt.tag_id
+          where relevance_exact_pt.plugin_id = p.id
+            and (
+              lower(relevance_exact_t.name) = lower($${exactParam})
+              or lower(relevance_exact_t.slug) = lower($${exactParam})
+            )
+        ) then 4
+        when exists (
+          select 1
+          from plugin_tags relevance_prefix_pt
+          join tags relevance_prefix_t on relevance_prefix_t.id = relevance_prefix_pt.tag_id
+          where relevance_prefix_pt.plugin_id = p.id
+            and (
+              relevance_prefix_t.name ilike $${prefixParam} escape '\\'
+              or relevance_prefix_t.slug ilike $${prefixParam} escape '\\'
+            )
+        ) then 5
+        when p.name ilike $${containsParam} escape '\\' then 6
+        when p.slug ilike $${containsParam} escape '\\' then 7
+        when p.author ilike $${prefixParam} escape '\\' then 8
+        when exists (
+          select 1
+          from plugin_tags relevance_contains_pt
+          join tags relevance_contains_t on relevance_contains_t.id = relevance_contains_pt.tag_id
+          where relevance_contains_pt.plugin_id = p.id
+            and (
+              relevance_contains_t.name ilike $${containsParam} escape '\\'
+              or relevance_contains_t.slug ilike $${containsParam} escape '\\'
+            )
+        ) then 9
+        when p.short_description ilike $${containsParam} escape '\\' then 10
+        else 11
+      end asc,
+      coalesce(p.active_installs, 0) desc,
+      coalesce(p.downloads, 0) desc,
+      coalesce(p.rating_count, 0) desc,
+      coalesce(p.rating, 0) desc,
+      coalesce(pcs.score, 0) desc,
+      p.slug asc
+    `;
+  }
+
+  return {
+    score_desc: "coalesce(pcs.score, 0) desc, p.slug asc",
+    score_asc: "coalesce(pcs.score, 0) asc, p.slug asc",
+    downloads_desc: "coalesce(p.downloads, 0) desc, p.slug asc",
+    installs_desc: "coalesce(p.active_installs, 0) desc, p.slug asc",
+    updated_desc: "p.last_updated_at desc nulls last, p.slug asc",
+    scanned_desc: "pcs.scanned_at desc nulls last, p.slug asc",
+    issues_desc: "coalesce(pcs.total_findings, 0) desc, p.slug asc",
+    delta_desc: "(coalesce(pcs.score, 0) - coalesce(pcs.previous_score, pcs.score, 0)) desc, p.slug asc",
+    relevance_desc: "coalesce(p.active_installs, 0) desc, p.slug asc",
   }[sort];
 }
 

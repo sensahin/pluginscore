@@ -99,6 +99,12 @@ export class MemoryStore implements PluginScoreStore {
       ? filtered.filter((plugin) => plugin.findings > 0 && plugin.latestAudit?.status === "complete")
       : filtered;
     const sorted = [...issueFiltered].sort((a, b) => {
+      if (options.sort === "relevance_desc" && normalizedQuery) {
+        return (
+          pluginRelevanceRank(a, normalizedQuery) - pluginRelevanceRank(b, normalizedQuery) ||
+          comparePluginPopularity(a, b)
+        );
+      }
       if (options.sort === "score_asc") return a.score - b.score || a.slug.localeCompare(b.slug);
       if (options.sort === "issues_desc") return b.findings - a.findings || a.slug.localeCompare(b.slug);
       if (options.sort === "installs_desc") return parseDownloads(b.activeInstalls) - parseDownloads(a.activeInstalls) || a.slug.localeCompare(b.slug);
@@ -453,7 +459,7 @@ function sampleTagSummaries(): TagSummary[] {
 }
 
 function parseDownloads(downloads: string) {
-  const normalized = downloads.toLowerCase();
+  const normalized = downloads.toLowerCase().replace("+", "").trim();
   const value = Number.parseFloat(normalized);
 
   if (normalized.endsWith("m")) return value * 1_000_000;
@@ -472,7 +478,7 @@ function normalizeTagSlug(value: string) {
 }
 
 function normalizeSearchQuery(query?: string) {
-  const normalized = query?.trim().toLowerCase();
+  const normalized = query ? normalizeSearchText(query) : undefined;
   return normalized ? normalized : undefined;
 }
 
@@ -481,13 +487,63 @@ function scoreDelta(plugin: (typeof plugins)[number]) {
 }
 
 function pluginMatches(plugin: (typeof plugins)[number], query: string) {
+  return searchablePluginValues(plugin).some((value) => value.includes(query));
+}
+
+function pluginRelevanceRank(plugin: (typeof plugins)[number], query: string) {
+  const name = normalizeSearchText(plugin.name);
+  const slug = normalizeSearchText(plugin.slug);
+  const author = normalizeSearchText(plugin.author ?? "");
+  const description = normalizeSearchText(plugin.shortDescription ?? "");
+  const tags = (plugin.tags ?? []).flatMap((tag) => [
+    normalizeSearchText(tag.name),
+    normalizeSearchText(tag.slug),
+  ]);
+
+  if (name === query) return 0;
+  if (slug === query) return 1;
+  if (name.startsWith(query)) return 2;
+  if (slug.startsWith(query)) return 3;
+  if (tags.some((tag) => tag === query)) return 4;
+  if (tags.some((tag) => tag.startsWith(query))) return 5;
+  if (name.includes(query)) return 6;
+  if (slug.includes(query)) return 7;
+  if (author.startsWith(query)) return 8;
+  if (tags.some((tag) => tag.includes(query))) return 9;
+  if (description.includes(query)) return 10;
+
+  return 11;
+}
+
+function comparePluginPopularity(a: (typeof plugins)[number], b: (typeof plugins)[number]) {
+  return (
+    parseDownloads(b.activeInstalls) - parseDownloads(a.activeInstalls) ||
+    parseDownloads(b.downloads) - parseDownloads(a.downloads) ||
+    (b.ratingCount ?? 0) - (a.ratingCount ?? 0) ||
+    (b.rating ?? 0) - (a.rating ?? 0) ||
+    b.lastUpdated.localeCompare(a.lastUpdated) ||
+    b.score - a.score ||
+    a.slug.localeCompare(b.slug)
+  );
+}
+
+function searchablePluginValues(plugin: (typeof plugins)[number]) {
   return [
     plugin.slug,
     plugin.name,
     plugin.shortDescription,
     plugin.author,
     ...(plugin.tags ?? []).flatMap((tag) => [tag.slug, tag.name]),
-  ].some((value) => value?.toLowerCase().includes(query));
+  ].map((value) => normalizeSearchText(value ?? ""));
+}
+
+function normalizeSearchText(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function paginateItems<T>(items: T[], page: number, perPage: number): PaginatedResult<T> {

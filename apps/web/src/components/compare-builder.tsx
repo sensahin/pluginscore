@@ -10,16 +10,10 @@ import {
   normalizePluginSlug,
   parseCompactNumber,
 } from "@/lib/compare";
+import type { PluginSuggestion } from "@/lib/plugin-suggestions";
+import { usePluginSuggestions } from "@/lib/use-plugin-suggestions";
 
-type ComparePlugin = {
-  slug: string;
-  name: string;
-  activeInstalls: string;
-  rating?: number;
-  ratingCount?: number;
-  lastUpdated: string;
-  score: number;
-};
+type ComparePlugin = PluginSuggestion;
 
 export function CompareBuilder({
   plugins,
@@ -36,9 +30,26 @@ export function CompareBuilder({
       .filter((slug, index, slugs) => slug && slugs.indexOf(slug) === index)
       .slice(0, MAX_COMPARE_PLUGINS),
   );
+  const [addedPlugins, setAddedPlugins] = useState<ComparePlugin[]>([]);
+  const {
+    items: remoteSuggestions,
+    isLoading: isLoadingSuggestions,
+    trimmedQuery,
+  } = usePluginSuggestions(query);
+  const localSuggestions = useMemo(
+    () => getSuggestions(plugins, trimmedQuery),
+    [plugins, trimmedQuery],
+  );
+  const suggestions = useMemo(
+    () =>
+      (remoteSuggestions ?? localSuggestions)
+        .filter((plugin) => !selectedSlugs.includes(plugin.slug))
+        .slice(0, 8),
+    [localSuggestions, remoteSuggestions, selectedSlugs],
+  );
   const pluginBySlug = useMemo(
-    () => new Map(plugins.map((plugin) => [plugin.slug, plugin])),
-    [plugins],
+    () => new Map([...plugins, ...addedPlugins, ...suggestions].map((plugin) => [plugin.slug, plugin])),
+    [addedPlugins, plugins, suggestions],
   );
   const selectedPlugins = selectedSlugs.map((slug) => {
     const plugin = pluginBySlug.get(slug);
@@ -48,19 +59,21 @@ export function CompareBuilder({
       name: plugin?.name ?? slug,
     };
   });
-  const suggestions = useMemo(
-    () =>
-      getSuggestions(plugins, query)
-        .filter((plugin) => !selectedSlugs.includes(plugin.slug))
-        .slice(0, 8),
-    [plugins, query, selectedSlugs],
-  );
   const canAddMore = selectedSlugs.length < MAX_COMPARE_PLUGINS;
   const canCompare = selectedSlugs.length >= MIN_COMPARE_PLUGINS;
 
   function addPlugin(slug: string) {
     if (!canAddMore || selectedSlugs.includes(slug)) {
       return;
+    }
+
+    const plugin = suggestions.find((suggestion) => suggestion.slug === slug);
+    if (plugin) {
+      setAddedPlugins((current) =>
+        current.some((knownPlugin) => knownPlugin.slug === plugin.slug)
+          ? current
+          : [...current, plugin],
+      );
     }
 
     setSelectedSlugs((current) => [...current, slug].slice(0, MAX_COMPARE_PLUGINS));
@@ -134,7 +147,7 @@ export function CompareBuilder({
               autoComplete="off"
               spellCheck={false}
             />
-            {query.trim() && suggestions.length > 0 ? (
+            {trimmedQuery && suggestions.length > 0 ? (
               <div className="absolute left-0 right-0 top-full z-20 mt-2 max-h-80 overflow-auto rounded-md border border-line bg-surface py-2 shadow-lg">
                 {suggestions.map((plugin) => (
                   <button
@@ -154,7 +167,7 @@ export function CompareBuilder({
           </div>
         ) : null}
 
-        {query.trim() && suggestions.length === 0 ? (
+        {trimmedQuery && remoteSuggestions !== null && !isLoadingSuggestions && suggestions.length === 0 ? (
           <div className="rounded-md border border-dashed border-line p-4 text-sm text-muted">
             No indexed plugin matched that search.
           </div>
