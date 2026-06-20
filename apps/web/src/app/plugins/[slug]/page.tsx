@@ -374,7 +374,7 @@ function ScoreCard({ plugin }: { plugin: PluginDetail }) {
           className="border-warn/20 bg-warn/10 text-warn"
         />
         <ScoreMetric
-          label="Delta"
+          label="Change"
           value={isPending ? "—" : `${delta >= 0 ? "+" : ""}${delta}`}
           className="border-info/20 bg-info/10 text-info"
         />
