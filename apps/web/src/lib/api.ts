@@ -55,6 +55,9 @@ const apiBaseUrl = process.env.PLUGINSCORE_API_URL;
 const internalApiToken = process.env.PLUGINSCORE_API_INTERNAL_TOKEN ?? process.env.API_INTERNAL_TOKEN;
 const DEFAULT_API_REVALIDATE_SECONDS = 1_800;
 const PLUGIN_DETAIL_REVALIDATE_SECONDS = 900;
+const allowSampleFallback =
+  process.env.PLUGINSCORE_ALLOW_SAMPLE_DATA === "true" ||
+  process.env.NODE_ENV !== "production";
 
 const sampleStats: ApiStats = {
   indexedPlugins: samplePlugins.length,
@@ -304,7 +307,11 @@ async function fetchFromApi<T>(
   options: { cache?: RequestCache; headers?: HeadersInit; revalidate?: number } = {},
 ): Promise<T> {
   if (!apiBaseUrl) {
-    return fallback;
+    if (allowSampleFallback) {
+      return fallback;
+    }
+
+    throw new Error(`PLUGINSCORE_API_URL is required to fetch ${path}`);
   }
 
   try {
@@ -326,8 +333,12 @@ async function fetchFromApi<T>(
 
     return (await response.json()) as T;
   } catch (error) {
-    console.warn(`Falling back to sample PluginScore data for ${path}:`, error);
-    return fallback;
+    if (allowSampleFallback) {
+      console.warn(`Falling back to sample PluginScore data for ${path}:`, error);
+      return fallback;
+    }
+
+    throw error;
   }
 }
 
