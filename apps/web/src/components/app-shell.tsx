@@ -1,10 +1,11 @@
-import { BarChart3 } from "lucide-react";
+import { BarChart3, GitCompareArrows } from "lucide-react";
 import Link from "next/link";
 import { BrandMark } from "@/components/brand-mark";
 import { getStats } from "@/lib/api";
 
 const navItems = [
   { href: "/rankings", label: "Rankings", icon: BarChart3 },
+  { href: "/compare", label: "Compare", icon: GitCompareArrows },
 ];
 
 const githubUrl =

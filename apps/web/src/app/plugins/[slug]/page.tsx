@@ -9,6 +9,7 @@ import {
   Clock3,
   Download,
   ExternalLink,
+  GitCompareArrows,
   Package,
   Star,
   User,
@@ -278,8 +279,15 @@ function PluginSummaryHeader({
             ) : null}
           </div>
 
-          <div className="mt-4">
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
             <TagChips tags={plugin.tags} />
+            <Link
+              href={`/compare?plugins=${encodeURIComponent(plugin.slug)}`}
+              className="inline-flex h-9 w-fit items-center gap-2 rounded-md border border-line px-3 text-sm font-semibold transition hover:bg-surface-subtle"
+            >
+              <GitCompareArrows size={16} aria-hidden="true" />
+              Compare
+            </Link>
           </div>
         </div>
 
