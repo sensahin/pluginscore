@@ -185,6 +185,10 @@ export async function getPluginScoreHistory(slug: string, limit = 20) {
 }
 
 export async function getStats() {
+  return fetchFromApi<ApiStats>("/stats", sampleStats);
+}
+
+export async function getFreshStats() {
   return fetchFromApi<ApiStats>("/stats", sampleStats, { cache: "no-store" });
 }
 

@@ -6,7 +6,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { getHealth, getQueue, getStats } from "@/lib/api";
+import { getFreshStats, getHealth, getQueue } from "@/lib/api";
 
 export const metadata = {
   title: "Admin",
@@ -19,7 +19,7 @@ export const metadata = {
 export default async function AdminPage() {
   const [health, stats, queueJobs] = await Promise.all([
     getHealth(),
-    getStats(),
+    getFreshStats(),
     getQueue(20),
   ]);
   const metrics = [
