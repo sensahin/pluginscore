@@ -649,14 +649,14 @@ export class PostgresStore implements PluginScoreStore {
           author, author_url, homepage_url, requires_wp, tested_wp,
           requires_php, rating, rating_count, support_threads,
           support_threads_resolved, current_version, active_installs,
-          downloads, last_updated_at, download_url, updated_at
+          downloads, last_updated_at, wporg_added_at, download_url, updated_at
         )
         values (
           $1, $2, $3, $4, $5,
           $6, $7, $8, $9, $10,
           $11, $12, $13, $14,
           $15, $16, $17,
-          $18, $19, $20, now()
+          $18, $19, $20, $21, now()
         )
         on conflict (slug) do update set
           name = excluded.name,
@@ -677,6 +677,7 @@ export class PostgresStore implements PluginScoreStore {
           active_installs = excluded.active_installs,
           downloads = excluded.downloads,
           last_updated_at = excluded.last_updated_at,
+          wporg_added_at = excluded.wporg_added_at,
           download_url = excluded.download_url,
           updated_at = now()
         returning id
@@ -701,6 +702,7 @@ export class PostgresStore implements PluginScoreStore {
           input.activeInstalls ?? null,
           input.downloaded ?? null,
           parseOptionalDate(input.lastUpdated),
+          parseOptionalDate(input.addedAt),
           input.downloadLink,
         ],
       );
@@ -1454,6 +1456,7 @@ function pluginListSelectSql(extraColumn?: string) {
         p.active_installs,
         p.downloads,
         p.last_updated_at,
+        p.wporg_added_at,
         pcs.audit_run_id,
         pcs.scanned_at,
         coalesce(pcs.score, 0) as score,
@@ -1618,6 +1621,7 @@ function rowToPluginSummary(row: Record<string, unknown>): PluginSummary {
     activeInstalls: formatCompact(Number(row.active_installs ?? 0)),
     downloads: formatCompact(Number(row.downloads ?? 0)),
     lastUpdated: row.last_updated_at ? new Date(String(row.last_updated_at)).toISOString().slice(0, 10) : "unknown",
+    addedAt: row.wporg_added_at ? new Date(String(row.wporg_added_at)).toISOString().slice(0, 10) : undefined,
     scannedAt: row.scanned_at ? new Date(String(row.scanned_at)).toISOString() : undefined,
     findings: Number(row.total_findings ?? 0),
     errors: Number(row.error_count ?? 0),

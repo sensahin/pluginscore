@@ -72,6 +72,8 @@ components:
           minimum: 0
         lastUpdated:
           type: string
+        addedAt:
+          type: string
         downloadLink:
           type: string
           format: uri
@@ -156,6 +158,8 @@ components:
         downloads:
           type: string
         lastUpdated:
+          type: string
+        addedAt:
           type: string
         scannedAt:
           type: string

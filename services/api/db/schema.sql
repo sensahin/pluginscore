@@ -19,6 +19,7 @@ create table if not exists plugins (
   active_installs integer,
   downloads bigint,
   last_updated_at timestamptz,
+  wporg_added_at timestamptz,
   download_url text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -38,6 +39,7 @@ alter table if exists plugins add column if not exists rating integer;
 alter table if exists plugins add column if not exists rating_count integer;
 alter table if exists plugins add column if not exists support_threads integer;
 alter table if exists plugins add column if not exists support_threads_resolved integer;
+alter table if exists plugins add column if not exists wporg_added_at timestamptz;
 
 create table if not exists plugin_search_events (
   id bigserial primary key,

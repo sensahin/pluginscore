@@ -20,6 +20,7 @@ type WordPressApiPlugin = {
   active_installs?: number;
   downloaded?: number;
   last_updated?: string;
+  added?: string;
   download_link?: unknown;
   tags?: Record<string, string>;
   error?: string;
@@ -134,6 +135,7 @@ function addPluginFields(params: URLSearchParams) {
   params.set("request[fields][downloaded]", "1");
   params.set("request[fields][downloadlink]", "1");
   params.set("request[fields][last_updated]", "1");
+  params.set("request[fields][added]", "1");
   params.set("request[fields][active_installs]", "1");
   params.set("request[fields][icons]", "1");
   params.set("request[fields][banners]", "1");
@@ -175,6 +177,7 @@ function pluginToMetadata(plugin: WordPressApiPlugin): WordPressPluginMetadata |
     activeInstalls: plugin.active_installs,
     downloaded: plugin.downloaded,
     lastUpdated: normalizeWordPressDate(plugin.last_updated),
+    addedAt: normalizeWordPressDate(plugin.added),
     downloadLink: plugin.download_link,
     tags: normalizeTags(plugin.tags),
   };

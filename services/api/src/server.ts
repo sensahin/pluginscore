@@ -107,6 +107,7 @@ const enqueueJobBody = z.object({
   activeInstalls: z.number().int().nonnegative().optional(),
   downloaded: z.number().int().nonnegative().optional(),
   lastUpdated: optionalText,
+  addedAt: optionalText,
   downloadLink: z.string().url(),
   reason: z.string().min(1).default("manual"),
   priority: z.number().int().min(0).max(1000).optional(),

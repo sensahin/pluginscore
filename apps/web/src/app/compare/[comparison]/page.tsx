@@ -17,6 +17,7 @@ import {
   parseCompactNumber,
   parseComparisonPath,
 } from "@/lib/compare";
+import { formatPluginDirectoryAge } from "@/lib/plugin-age";
 import { seoMetadata, truncateText } from "@/lib/seo";
 
 type CompareRouteProps = {
@@ -164,6 +165,10 @@ export default async function CompareRoutePage({ params }: CompareRouteProps) {
                 label: "Last updated",
                 values: entries.map((entry) => formatShortDate(entry.plugin.lastUpdated)),
               },
+              {
+                label: "Directory age",
+                values: entries.map((entry) => formatPluginDirectoryAge(entry.plugin.addedAt) ?? "Unknown"),
+              },
             ]}
           />
         </ComparisonSection>
@@ -233,6 +238,10 @@ export default async function CompareRoutePage({ params }: CompareRouteProps) {
               {
                 label: "Downloads",
                 values: entries.map((entry) => entry.plugin.downloads),
+              },
+              {
+                label: "Added to WP.org",
+                values: entries.map((entry) => formatShortDate(entry.plugin.addedAt)),
               },
               {
                 label: "Requires WP",
@@ -756,7 +765,11 @@ function formatOptional(value?: string) {
   return value?.trim() || "Unknown";
 }
 
-function formatShortDate(value: string) {
+function formatShortDate(value?: string) {
+  if (!value) {
+    return "Unknown";
+  }
+
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {

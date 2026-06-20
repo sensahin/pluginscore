@@ -22,6 +22,7 @@ export type PluginSummary = {
   activeInstalls: string;
   downloads: string;
   lastUpdated: string;
+  addedAt?: string;
   scannedAt?: string;
   findings: number;
   errors: number;
@@ -241,6 +242,7 @@ export type WordPressPluginMetadata = {
   activeInstalls?: number;
   downloaded?: number;
   lastUpdated?: string;
+  addedAt?: string;
   downloadLink: string;
   tags?: PluginTag[];
 };

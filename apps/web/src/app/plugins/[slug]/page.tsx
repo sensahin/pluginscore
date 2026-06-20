@@ -9,7 +9,6 @@ import {
   Clock3,
   Download,
   ExternalLink,
-  GitCompareArrows,
   Package,
   Star,
   User,
@@ -25,6 +24,7 @@ import {
   uniquePluginsBySlug,
   withoutPlugin,
 } from "@/lib/plugin-list-utils";
+import { formatPluginDirectoryAge } from "@/lib/plugin-age";
 import { plugins, scoreDelta } from "@/lib/plugin-score-data";
 import { pluginScoreTitle, seoMetadata } from "@/lib/seo";
 
@@ -264,6 +264,12 @@ function PluginSummaryHeader({
               icon={<Calendar size={16} />}
               value={`Updated ${plugin.lastUpdated}`}
             />
+            {plugin.addedAt ? (
+              <IconMeta
+                icon={<Calendar size={16} />}
+                value={`Added ${formatShortDate(plugin.addedAt)}`}
+              />
+            ) : null}
             <IconMeta
               icon={<Download size={16} />}
               value={`${plugin.activeInstalls} installs`}
@@ -279,16 +285,11 @@ function PluginSummaryHeader({
             ) : null}
           </div>
 
-          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <TagChips tags={plugin.tags} />
-            <Link
-              href={`/compare?plugins=${encodeURIComponent(plugin.slug)}`}
-              className="inline-flex h-9 w-fit items-center gap-2 rounded-md border border-line px-3 text-sm font-semibold transition hover:bg-surface-subtle"
-            >
-              <GitCompareArrows size={16} aria-hidden="true" />
-              Compare
-            </Link>
-          </div>
+          {plugin.tags?.length ? (
+            <div className="mt-4">
+              <TagChips tags={plugin.tags} />
+            </div>
+          ) : null}
         </div>
 
         <div className="flex flex-col gap-6 lg:w-fit lg:flex-row">
@@ -945,6 +946,14 @@ function PluginMetadata({
           href={plugin.homepageUrl}
         />
         <MetaRow label="Version" value={plugin.version} />
+        <MetaRow
+          label="Directory age"
+          value={formatPluginDirectoryAge(plugin.addedAt)}
+        />
+        <MetaRow
+          label="Added"
+          value={plugin.addedAt ? formatShortDate(plugin.addedAt) : undefined}
+        />
         <MetaRow label="Requires WP" value={plugin.requiresWp} />
         <MetaRow label="Tested up to" value={plugin.testedWp} />
         <MetaRow label="Requires PHP" value={plugin.requiresPhp} />
