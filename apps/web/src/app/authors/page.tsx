@@ -11,6 +11,8 @@ export const metadata = seoMetadata({
   path: "/authors",
 });
 
+export const revalidate = 1_800;
+
 export default async function AuthorsPage() {
   const authors = await getAuthors(100);
 

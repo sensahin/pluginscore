@@ -3,11 +3,13 @@ import { getAuthors, getTags } from "@/lib/api";
 import { issues, plugins } from "@/lib/plugin-score-data";
 import { slugifyLabel } from "@/lib/route-utils";
 
+export const revalidate = 3_600;
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
   const [authors, tags] = await Promise.all([
-    getAuthors(500),
-    getTags(500, 3),
+    getAuthors(150),
+    getTags(150, 3),
   ]);
   const rankingRoutes = [
     "/rankings/best",

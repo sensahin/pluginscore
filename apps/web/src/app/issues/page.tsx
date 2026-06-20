@@ -10,6 +10,8 @@ export const metadata = seoMetadata({
   path: "/issues",
 });
 
+export const revalidate = 1_800;
+
 export default async function IssuesPage() {
   const issues = await getIssues();
 

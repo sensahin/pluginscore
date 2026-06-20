@@ -22,6 +22,8 @@ export const metadata = seoMetadata({
   absoluteTitle: true,
 });
 
+export const revalidate = 1_800;
+
 export default async function Home() {
   const [
     searchPlugins,

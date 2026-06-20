@@ -13,6 +13,8 @@ import {
 import { issues } from "@/lib/plugin-score-data";
 import { seoDisplayName, seoMetadata } from "@/lib/seo";
 
+export const revalidate = 1_800;
+
 type IssuePageProps = {
   params: Promise<{ code: string }>;
   searchParams: Promise<{ page?: string }>;

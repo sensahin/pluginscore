@@ -32,6 +32,8 @@ type PluginPageProps = {
   params: Promise<{ slug: string }>;
 };
 
+export const revalidate = 1_800;
+
 export function generateStaticParams() {
   return plugins.map((plugin) => ({ slug: plugin.slug }));
 }

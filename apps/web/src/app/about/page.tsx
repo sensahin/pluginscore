@@ -11,6 +11,8 @@ export const metadata = seoMetadata({
   absoluteTitle: true,
 });
 
+export const revalidate = 1_800;
+
 export default async function AboutPage() {
   const indexedPlugins = await getPlugins({ limit: 500, sort: "updated_desc" });
   const indexedLabel =

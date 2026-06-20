@@ -64,6 +64,8 @@ const rankingKinds = {
   },
 } as const;
 
+export const revalidate = 1_800;
+
 type RankingKind = keyof typeof rankingKinds;
 
 type RankingPageProps = {

@@ -35,6 +35,8 @@ const authorSorts = {
   },
 } as const;
 
+export const revalidate = 1_800;
+
 type AuthorSort = keyof typeof authorSorts;
 
 type AuthorPageProps = {

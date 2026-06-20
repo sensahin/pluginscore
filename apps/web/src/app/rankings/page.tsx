@@ -22,6 +22,8 @@ const rankingLinks = [
   { href: "/rankings/recently-updated", label: "Recently Scanned" },
 ];
 
+export const revalidate = 1_800;
+
 type RankingsPageProps = {
   searchParams: Promise<{ page?: string }>;
 };

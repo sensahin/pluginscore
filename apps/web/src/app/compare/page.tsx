@@ -22,6 +22,8 @@ export const metadata = seoMetadata({
   path: "/compare",
 });
 
+export const revalidate = 1_800;
+
 export default async function ComparePage({ searchParams }: ComparePageProps) {
   const { plugins: pluginsParam } = await searchParams;
   const requestedSlugs = parseComparisonQuery(pluginsParam);

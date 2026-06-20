@@ -50,6 +50,8 @@ type HealthStatus = {
 };
 
 const apiBaseUrl = process.env.PLUGINSCORE_API_URL;
+const DEFAULT_API_REVALIDATE_SECONDS = 1_800;
+const PLUGIN_DETAIL_REVALIDATE_SECONDS = 900;
 
 const sampleStats: ApiStats = {
   indexedPlugins: samplePlugins.length,
@@ -170,7 +172,7 @@ export async function getPlugin(slug: string) {
   return fetchFromApi<PluginDetail | null>(
     `/plugins/${encodeURIComponent(slug)}`,
     findSamplePlugin(slug) ?? null,
-    { cache: "no-store" },
+    { revalidate: PLUGIN_DETAIL_REVALIDATE_SECONDS },
   );
 }
 
@@ -178,12 +180,12 @@ export async function getPluginScoreHistory(slug: string, limit = 20) {
   return fetchFromApi<PluginScoreHistory | null>(
     `/plugins/${encodeURIComponent(slug)}/history?limit=${limit}`,
     samplePluginScoreHistory(slug),
-    { cache: "no-store" },
+    { revalidate: PLUGIN_DETAIL_REVALIDATE_SECONDS },
   );
 }
 
 export async function getStats() {
-  return fetchFromApi<ApiStats>("/stats", sampleStats);
+  return fetchFromApi<ApiStats>("/stats", sampleStats, { cache: "no-store" });
 }
 
 export async function getIssues() {
@@ -195,6 +197,7 @@ export async function getQueue(limit = 8) {
   return fetchFromApi<QueueJob[]>(
     `/queue?limit=${limit}`,
     sampleQueue.slice(0, limit),
+    { cache: "no-store" },
   );
 }
 
@@ -236,6 +239,7 @@ export async function getHealth(): Promise<HealthStatus> {
   const health = await fetchFromApi<Omit<HealthStatus, "apiUrl">>(
     "/health",
     fallback,
+    { cache: "no-store" },
   );
 
   return {
@@ -265,7 +269,7 @@ async function fetchFromApi<T>(
   try {
     const fetchOptions = options.cache
       ? { cache: options.cache }
-      : { next: { revalidate: options.revalidate ?? 300 } };
+      : { next: { revalidate: options.revalidate ?? DEFAULT_API_REVALIDATE_SECONDS } };
     const response = await fetch(new URL(path, apiBaseUrl), {
       ...fetchOptions,
     });

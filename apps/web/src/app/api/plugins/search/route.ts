@@ -3,6 +3,11 @@ import { getPluginsPage } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
+const cacheHeaders = {
+  "Cache-Control": "public, max-age=0, s-maxage=300, stale-while-revalidate=600",
+  "Vercel-CDN-Cache-Control": "public, max-age=0, s-maxage=300, stale-while-revalidate=600",
+};
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const query = url.searchParams.get("q")?.trim() ?? "";
@@ -12,7 +17,7 @@ export async function GET(request: Request) {
     : 8;
 
   if (!query) {
-    return NextResponse.json({ items: [] });
+    return NextResponse.json({ items: [] }, { headers: cacheHeaders });
   }
 
   const result = await getPluginsPage({
@@ -22,8 +27,11 @@ export async function GET(request: Request) {
     query,
   });
 
-  return NextResponse.json({
-    items: result.items,
-    total: result.total,
-  });
+  return NextResponse.json(
+    {
+      items: result.items,
+      total: result.total,
+    },
+    { headers: cacheHeaders },
+  );
 }

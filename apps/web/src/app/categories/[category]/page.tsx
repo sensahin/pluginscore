@@ -15,6 +15,8 @@ import { issues as sampleIssues } from "@/lib/plugin-score-data";
 import { slugifyLabel, titleFromSlug } from "@/lib/route-utils";
 import { seoDisplayName, seoMetadata } from "@/lib/seo";
 
+export const revalidate = 1_800;
+
 type CategoryPageProps = {
   params: Promise<{ category: string }>;
   searchParams: Promise<{ page?: string }>;

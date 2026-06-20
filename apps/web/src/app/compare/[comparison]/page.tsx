@@ -39,7 +39,7 @@ const chartColors = [
   "var(--warn)",
 ];
 
-export const dynamic = "force-dynamic";
+export const revalidate = 1_800;
 
 export async function generateMetadata({
   params,

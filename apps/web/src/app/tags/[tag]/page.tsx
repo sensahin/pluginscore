@@ -35,6 +35,8 @@ const tagSorts = {
   },
 } as const;
 
+export const revalidate = 1_800;
+
 type TagSort = keyof typeof tagSorts;
 
 type TagPageProps = {
