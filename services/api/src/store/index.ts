@@ -5,6 +5,8 @@ import type { PluginScoreStore } from "./types.js";
 export type StoreOptions = {
   runningJobTimeoutSeconds?: number;
   runningJobMaxAttempts?: number;
+  scanRetryBackoffSeconds?: number;
+  scanTerminalTimeoutAttempts?: number;
 };
 
 export function createStore(databaseUrl?: string, options: StoreOptions = {}): PluginScoreStore {

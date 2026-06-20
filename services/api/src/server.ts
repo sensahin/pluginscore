@@ -143,6 +143,8 @@ const completeJobBody = z.object({
 
 const failJobBody = z.object({
   message: z.string().min(1),
+  pluginCheckVersion: z.string().min(1).optional(),
+  scoringModelVersion: z.string().min(1).optional(),
   timedOut: z.boolean().optional(),
   stderr: z.string().optional(),
   durationMs: z.number().int().nonnegative().optional(),

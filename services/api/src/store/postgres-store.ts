@@ -46,11 +46,15 @@ export class PostgresStore implements PluginScoreStore {
   private pool: Pool;
   private runningJobTimeoutSeconds: number;
   private runningJobMaxAttempts: number;
+  private scanRetryBackoffSeconds: number;
+  private scanTerminalTimeoutAttempts: number;
 
   constructor(databaseUrl: string, options: StoreOptions = {}) {
     this.pool = new Pool({ connectionString: databaseUrl });
     this.runningJobTimeoutSeconds = options.runningJobTimeoutSeconds ?? 1800;
     this.runningJobMaxAttempts = options.runningJobMaxAttempts ?? 3;
+    this.scanRetryBackoffSeconds = options.scanRetryBackoffSeconds ?? 21_600;
+    this.scanTerminalTimeoutAttempts = options.scanTerminalTimeoutAttempts ?? 2;
   }
 
   async health() {
@@ -67,7 +71,7 @@ export class PostgresStore implements PluginScoreStore {
         (select count(*)::integer from audit_runs where status = 'complete') as completed_scans,
         (select count(*)::integer from scan_jobs where status = 'queued') as queued_jobs,
         (select count(*)::integer from scan_jobs where status = 'running') as running_jobs,
-        (select count(*)::integer from scan_jobs where status in ('failed', 'cancelled')) as failed_jobs,
+        (select count(*)::integer from scan_jobs where status = 'failed') as failed_jobs,
         (select count(*)::integer from finding_codes) as issue_codes,
         (select count(*)::integer from plugin_search_events) as recent_searches
       `,
@@ -754,6 +758,17 @@ export class PostgresStore implements PluginScoreStore {
         if (completed.rows[0]) {
           return { id: 0, queued: false };
         }
+
+        const retrySuppression = await this.getRetrySuppression(client, {
+          pluginId,
+          pluginVersion: input.version,
+          pluginCheckVersion: input.pluginCheckVersion ?? null,
+          scoringModelVersion: input.scoringModelVersion ?? null,
+        });
+
+        if (retrySuppression) {
+          return { id: 0, queued: false };
+        }
       }
 
       const job = await client.query<{ id: number }>(
@@ -767,6 +782,57 @@ export class PostgresStore implements PluginScoreStore {
 
       return { id: Number(job.rows[0]?.id ?? 0), queued: true };
     });
+  }
+
+  private async getRetrySuppression(
+    client: PoolClient,
+    {
+      pluginId,
+      pluginVersion,
+      pluginCheckVersion,
+      scoringModelVersion,
+    }: {
+      pluginId: number;
+      pluginVersion: string;
+      pluginCheckVersion: string | null;
+      scoringModelVersion: string | null;
+    },
+  ) {
+    const result = await client.query<{
+      timeout_count: number;
+      recent_failure_count: number;
+    }>(
+      `
+      select
+        count(*) filter (where status = 'timeout')::integer as timeout_count,
+        count(*) filter (
+          where completed_at > now() - make_interval(secs => $5::integer)
+        )::integer as recent_failure_count
+      from audit_runs
+      where plugin_id = $1
+        and plugin_version = $2
+        and status in ('failed', 'timeout')
+        and ($3::text is null or plugin_check_version = $3)
+        and ($4::text is null or scoring_model_version = $4)
+      `,
+      [
+        pluginId,
+        pluginVersion,
+        pluginCheckVersion,
+        scoringModelVersion,
+        Math.max(0, this.scanRetryBackoffSeconds),
+      ],
+    );
+
+    const row = result.rows[0] ?? { timeout_count: 0, recent_failure_count: 0 };
+    const timeoutCount = Number(row.timeout_count ?? 0);
+    const recentFailureCount = Number(row.recent_failure_count ?? 0);
+
+    if (this.scanTerminalTimeoutAttempts > 0 && timeoutCount >= this.scanTerminalTimeoutAttempts) {
+      return true;
+    }
+
+    return this.scanRetryBackoffSeconds > 0 && recentFailureCount > 0;
   }
 
   async claimNextJob(): Promise<ScanJobDto | null> {
@@ -878,7 +944,7 @@ export class PostgresStore implements PluginScoreStore {
           job.plugin_id,
           payload.pluginVersion,
           payload.pluginCheckVersion,
-          SCORING_MODEL_VERSION,
+          payload.scoringModelVersion,
           payload.sourceDownloadUrl,
           payload.sourceSha256 ?? null,
           payload.exitCode,
@@ -975,16 +1041,17 @@ export class PostgresStore implements PluginScoreStore {
           timed_out, duration_ms, stderr, completed_at
         )
         select
-          p.id, sj.target_version, 'unknown', $2, p.download_url,
-          case when $3 then 'timeout' else 'failed' end,
-          $3, $4, $5, now()
+          p.id, sj.target_version, $2, $3, p.download_url,
+          case when $4 then 'timeout' else 'failed' end,
+          $4, $5, $6, now()
         from scan_jobs sj
         join plugins p on p.id = sj.plugin_id
         where sj.id = $1
         `,
         [
           id,
-          SCORING_MODEL_VERSION,
+          payload.pluginCheckVersion ?? "unknown",
+          payload.scoringModelVersion ?? SCORING_MODEL_VERSION,
           payload.timedOut ?? false,
           payload.durationMs ?? null,
           payload.stderr ?? payload.message,

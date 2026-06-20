@@ -11,6 +11,8 @@ export type ApiConfig = {
   bodyLimitBytes: number;
   runningJobTimeoutSeconds: number;
   runningJobMaxAttempts: number;
+  scanRetryBackoffSeconds: number;
+  scanTerminalTimeoutAttempts: number;
   pluginCheckVersion: string;
 };
 
@@ -26,6 +28,8 @@ export function getConfig(): ApiConfig {
     bodyLimitBytes: Number.parseInt(process.env.API_BODY_LIMIT_BYTES ?? "52428800", 10),
     runningJobTimeoutSeconds: Number.parseInt(process.env.RUNNING_JOB_TIMEOUT_SECONDS ?? "1800", 10),
     runningJobMaxAttempts: Number.parseInt(process.env.RUNNING_JOB_MAX_ATTEMPTS ?? "3", 10),
+    scanRetryBackoffSeconds: Number.parseInt(process.env.SCAN_RETRY_BACKOFF_SECONDS ?? "21600", 10),
+    scanTerminalTimeoutAttempts: Number.parseInt(process.env.SCAN_TERMINAL_TIMEOUT_ATTEMPTS ?? "2", 10),
     pluginCheckVersion: process.env.PLUGIN_CHECK_VERSION ?? "unknown",
   };
 }

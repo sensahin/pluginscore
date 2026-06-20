@@ -138,6 +138,7 @@ function renderCommand(command: string, variables: Record<string, string>) {
 function runShell(command: string, timeoutMs: number) {
   return new Promise<{ stdout: string; stderr: string; exitCode: number }>((resolve, reject) => {
     const child = spawn("/bin/sh", ["-lc", command], {
+      detached: process.platform !== "win32",
       stdio: ["ignore", "pipe", "pipe"],
     });
     const stdout: Buffer[] = [];
@@ -146,7 +147,7 @@ function runShell(command: string, timeoutMs: number) {
 
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGKILL");
+      killProcessGroup(child.pid);
     }, timeoutMs);
 
     child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
@@ -178,6 +179,29 @@ function runShell(command: string, timeoutMs: number) {
       resolve(output);
     });
   });
+}
+
+function killProcessGroup(pid: number | undefined) {
+  if (!pid) {
+    return;
+  }
+
+  try {
+    if (process.platform === "win32") {
+      process.kill(pid, "SIGKILL");
+    } else {
+      process.kill(-pid, "SIGKILL");
+    }
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "ESRCH") {
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch {
+        // The close handler reports the timeout even if the process already exited.
+      }
+    }
+  }
 }
 
 async function readReportText(jsonPath: string, stdout: string) {

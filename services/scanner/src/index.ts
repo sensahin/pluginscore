@@ -109,6 +109,8 @@ async function scanOnce() {
     try {
       await api.failJob(job.id, {
         message: (error as Error).message,
+        pluginCheckVersion: config.pluginCheckVersion,
+        scoringModelVersion: SCORING_MODEL_VERSION,
         timedOut: scanError?.options.timedOut,
         stderr: scanError?.options.stderr,
         durationMs: scanError?.options.durationMs ?? Date.now() - startedAt,

@@ -6,6 +6,8 @@ const config = getConfig();
 const store = createStore(config.databaseUrl, {
   runningJobTimeoutSeconds: config.runningJobTimeoutSeconds,
   runningJobMaxAttempts: config.runningJobMaxAttempts,
+  scanRetryBackoffSeconds: config.scanRetryBackoffSeconds,
+  scanTerminalTimeoutAttempts: config.scanTerminalTimeoutAttempts,
 });
 const server = await createServer(config, store);
 

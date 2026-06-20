@@ -285,6 +285,8 @@ export type ScanCompletePayload = {
 
 export type ScanFailPayload = {
   message: string;
+  pluginCheckVersion?: string;
+  scoringModelVersion?: string;
   timedOut?: boolean;
   stderr?: string;
   durationMs?: number;
