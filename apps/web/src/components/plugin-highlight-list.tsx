@@ -7,7 +7,6 @@ import {
 import Link from "next/link";
 import { PluginIcon } from "@/components/plugin-icon";
 import { ScorePill } from "@/components/score-pill";
-import { TagChips } from "@/components/tag-chips";
 import { scoreDelta, type PluginSummary } from "@/lib/plugin-score-data";
 
 export function PluginHighlightList({
@@ -73,9 +72,6 @@ export function PluginHighlightList({
                     <span>{plugin.activeInstalls} active installs</span>
                     {plugin.topIssue ? <span> - {plugin.topIssue}</span> : null}
                   </p>
-                  <div className="mt-2">
-                    <TagChips tags={plugin.tags} limit={3} size="xs" />
-                  </div>
                 </div>
               </div>
               <div className="flex items-center gap-3 sm:justify-end">
