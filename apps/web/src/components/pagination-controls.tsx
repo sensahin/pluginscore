@@ -9,6 +9,7 @@ type PaginationControlsProps = {
   total: number;
   totalPages: number;
   searchParams?: Record<string, string | number | boolean | undefined>;
+  hrefForPage?: (page: number) => string;
   itemLabel?: string;
 };
 
@@ -19,6 +20,7 @@ export function PaginationControls({
   total,
   totalPages,
   searchParams = {},
+  hrefForPage,
   itemLabel = "plugins",
 }: PaginationControlsProps) {
   if (totalPages <= 1) {
@@ -28,6 +30,8 @@ export function PaginationControls({
   const safePage = Math.min(Math.max(1, page), totalPages);
   const start = total === 0 ? 0 : (safePage - 1) * perPage + 1;
   const end = Math.min(total, safePage * perPage);
+  const buildHref =
+    hrefForPage ?? ((targetPage: number) => pageHref(basePath, targetPage, searchParams));
 
   return (
     <nav
@@ -39,7 +43,7 @@ export function PaginationControls({
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <PageLink
-          href={pageHref(basePath, safePage - 1, searchParams)}
+          href={buildHref(safePage - 1)}
           disabled={safePage <= 1}
           label="Previous page"
         >
@@ -56,7 +60,7 @@ export function PaginationControls({
           ) : (
             <PageLink
               key={item}
-              href={pageHref(basePath, item, searchParams)}
+              href={buildHref(item)}
               current={item === safePage}
               label={`Page ${item}`}
             >
@@ -65,7 +69,7 @@ export function PaginationControls({
           ),
         )}
         <PageLink
-          href={pageHref(basePath, safePage + 1, searchParams)}
+          href={buildHref(safePage + 1)}
           disabled={safePage >= totalPages}
           label="Next page"
         >
