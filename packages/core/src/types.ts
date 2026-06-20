@@ -180,6 +180,106 @@ export type AuditFindingsRetentionSummary = {
   estimatedReusableBytes: number;
 };
 
+export type OperationsVersionCount = {
+  version: string;
+  count: number;
+};
+
+export type OperationsRunningJob = {
+  plugin: string;
+  name: string;
+  version: string;
+  reason: string;
+  attempts: number;
+  runtimeMs: number;
+  updatedAt: string;
+};
+
+export type OperationsRecentScan = {
+  plugin: string;
+  name: string;
+  version: string;
+  completedAt: string;
+  durationMs?: number;
+  score?: number;
+  findings?: number;
+};
+
+export type OperationsRecentFailure = {
+  plugin: string;
+  name: string;
+  version: string;
+  state: "failed" | "timeout";
+  attempts?: number;
+  lastError?: string;
+  updatedAt?: string;
+  completedAt?: string;
+  durationMs?: number;
+};
+
+export type OperationsSummary = {
+  generatedAt: string;
+  coverage: {
+    indexedPlugins: number;
+    auditedPlugins: number;
+    unscannedPlugins: number;
+    completedScans: number;
+    coveragePercent: number;
+    queuedJobs: number;
+    runningJobs: number;
+    failedJobs: number;
+    userSubmittedQueuedJobs: number;
+  };
+  queue: {
+    queuedReadyJobs: number;
+    queuedDelayedJobs: number;
+    staleRunningJobs: number;
+    oldestQueuedAt?: string;
+    lastCompletedAt?: string;
+    lastFailedAt?: string;
+    completedScans24h: number;
+    completedScansPerHour24h: number;
+    averageDurationMs?: number;
+    p95DurationMs?: number;
+    estimatedDrainHours?: number;
+    running: OperationsRunningJob[];
+  };
+  storage: {
+    databaseBytes: number;
+    auditFindingsBytes: number;
+    auditRunsBytes: number;
+    scoreSnapshotsBytes: number;
+    scanJobsBytes: number;
+    rawReportJsonBytes: number;
+    stderrBytes: number;
+    totalFindingRows: number;
+    averageFindingsPerStoredAudit?: number;
+    p50FindingsPerStoredAudit?: number;
+    p90FindingsPerStoredAudit?: number;
+    p99FindingsPerStoredAudit?: number;
+    maxFindingsPerStoredAudit?: number;
+  };
+  versions: {
+    apiPluginCheckVersion: string;
+    scoringModelVersion: string;
+    pluginCheckVersions: OperationsVersionCount[];
+    scoringModelVersions: OperationsVersionCount[];
+  };
+  retryPolicy: {
+    runningJobTimeoutSeconds: number;
+    runningJobMaxAttempts: number;
+    scanRetryBackoffSeconds: number;
+    scanTerminalTimeoutAttempts: number;
+  };
+  failures: {
+    failedAuditRuns: number;
+    timeoutAuditRuns: number;
+    repeatedTimeoutPlugins: number;
+    recent: OperationsRecentFailure[];
+  };
+  recentCompleted: OperationsRecentScan[];
+};
+
 export type TrackedPluginSummary = {
   slug: string;
   version?: string;

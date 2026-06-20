@@ -10,6 +10,11 @@ import type {
   PluginDetail,
   PluginScoreHistory,
   NormalizedFinding,
+  OperationsRecentFailure,
+  OperationsRecentScan,
+  OperationsRunningJob,
+  OperationsSummary,
+  OperationsVersionCount,
   PluginSearchSummary,
   PluginSummary,
   QueueJob,
@@ -49,6 +54,7 @@ export class PostgresStore implements PluginScoreStore {
   private runningJobMaxAttempts: number;
   private scanRetryBackoffSeconds: number;
   private scanTerminalTimeoutAttempts: number;
+  private pluginCheckVersion: string;
 
   constructor(databaseUrl: string, options: StoreOptions = {}) {
     this.pool = new Pool({ connectionString: databaseUrl });
@@ -56,6 +62,7 @@ export class PostgresStore implements PluginScoreStore {
     this.runningJobMaxAttempts = options.runningJobMaxAttempts ?? 3;
     this.scanRetryBackoffSeconds = options.scanRetryBackoffSeconds ?? 21_600;
     this.scanTerminalTimeoutAttempts = options.scanTerminalTimeoutAttempts ?? 2;
+    this.pluginCheckVersion = options.pluginCheckVersion ?? "unknown";
   }
 
   async health() {
@@ -117,6 +124,277 @@ export class PostgresStore implements PluginScoreStore {
     );
 
     return rowToAuditFindingsRetentionSummary(result.rows[0] ?? {});
+  }
+
+  async operationsSummary(): Promise<OperationsSummary> {
+    const [
+      coverageResult,
+      queueResult,
+      runningResult,
+      storageResult,
+      distributionResult,
+      pluginCheckVersionResult,
+      scoringModelVersionResult,
+      failureResult,
+      recentFailureResult,
+      recentCompletedResult,
+    ] = await Promise.all([
+      this.pool.query(`
+        select
+          count(*)::integer as indexed_plugins,
+          count(pcs.plugin_id)::integer as audited_plugins,
+          (count(*) - count(pcs.plugin_id))::integer as unscanned_plugins,
+          (select count(*)::integer from audit_runs where status = 'complete') as completed_scans,
+          (select count(*)::integer from scan_jobs where status = 'queued') as queued_jobs,
+          (select count(*)::integer from scan_jobs where status = 'running') as running_jobs,
+          (select count(*)::integer from scan_jobs where status = 'failed') as failed_jobs,
+          (
+            select count(*)::integer
+            from scan_jobs
+            where status in ('queued', 'running')
+              and reason = 'user submission'
+          ) as user_submitted_queued_jobs
+        from plugins p
+        left join plugin_current_scores pcs on pcs.plugin_id = p.id
+      `),
+      this.pool.query(
+        `
+        with recent_complete as (
+          select duration_ms, completed_at
+          from audit_runs
+          where status = 'complete'
+            and completed_at > now() - interval '24 hours'
+        )
+        select
+          (select count(*)::integer from scan_jobs where status = 'queued' and run_after <= now()) as queued_ready_jobs,
+          (select count(*)::integer from scan_jobs where status = 'queued' and run_after > now()) as queued_delayed_jobs,
+          (
+            select count(*)::integer
+            from scan_jobs
+            where status = 'running'
+              and updated_at < now() - make_interval(secs => $1::integer)
+          ) as stale_running_jobs,
+          (select min(created_at) from scan_jobs where status = 'queued') as oldest_queued_at,
+          (select max(completed_at) from audit_runs where status = 'complete') as last_completed_at,
+          (select max(completed_at) from audit_runs where status in ('failed', 'timeout')) as last_failed_at,
+          (select count(*)::integer from recent_complete) as completed_scans_24h,
+          (select avg(duration_ms)::numeric from recent_complete where duration_ms is not null) as average_duration_ms,
+          (
+            select percentile_cont(0.95) within group (order by duration_ms)::numeric
+            from recent_complete
+            where duration_ms is not null
+          ) as p95_duration_ms
+        `,
+        [this.runningJobTimeoutSeconds],
+      ),
+      this.pool.query(
+        `
+        select
+          p.slug as plugin,
+          p.name,
+          sj.target_version as version,
+          sj.reason,
+          sj.attempts,
+          extract(epoch from now() - sj.updated_at) * 1000 as runtime_ms,
+          sj.updated_at
+        from scan_jobs sj
+        join plugins p on p.id = sj.plugin_id
+        where sj.status = 'running'
+        order by sj.updated_at asc
+        limit 8
+        `,
+      ),
+      this.pool.query(`
+        select
+          pg_database_size(current_database())::bigint as database_bytes,
+          pg_total_relation_size('audit_findings'::regclass)::bigint as audit_findings_bytes,
+          pg_total_relation_size('audit_runs'::regclass)::bigint as audit_runs_bytes,
+          pg_total_relation_size('score_snapshots'::regclass)::bigint as score_snapshots_bytes,
+          pg_total_relation_size('scan_jobs'::regclass)::bigint as scan_jobs_bytes,
+          coalesce((select sum(pg_column_size(raw_report_json))::bigint from audit_runs), 0::bigint) as raw_report_json_bytes,
+          coalesce((select sum(pg_column_size(stderr))::bigint from audit_runs), 0::bigint) as stderr_bytes
+      `),
+      this.pool.query(`
+        with per_run as (
+          select audit_run_id, count(*)::integer as finding_count
+          from audit_findings
+          group by audit_run_id
+        )
+        select
+          coalesce(sum(finding_count), 0)::bigint as total_finding_rows,
+          avg(finding_count)::numeric as average_findings_per_stored_audit,
+          percentile_cont(0.5) within group (order by finding_count)::numeric as p50_findings_per_stored_audit,
+          percentile_cont(0.9) within group (order by finding_count)::numeric as p90_findings_per_stored_audit,
+          percentile_cont(0.99) within group (order by finding_count)::numeric as p99_findings_per_stored_audit,
+          max(finding_count)::integer as max_findings_per_stored_audit
+        from per_run
+      `),
+      this.pool.query(`
+        select plugin_check_version as version, count(*)::integer as count
+        from audit_runs
+        where status = 'complete'
+        group by plugin_check_version
+        order by count desc, version asc
+        limit 8
+      `),
+      this.pool.query(`
+        select scoring_model_version as version, count(*)::integer as count
+        from audit_runs
+        where status = 'complete'
+        group by scoring_model_version
+        order by count desc, version asc
+        limit 8
+      `),
+      this.pool.query(`
+        with timeout_groups as (
+          select
+            plugin_id,
+            plugin_version,
+            plugin_check_version,
+            scoring_model_version,
+            count(*)::integer as timeout_count
+          from audit_runs
+          where status = 'timeout'
+          group by plugin_id, plugin_version, plugin_check_version, scoring_model_version
+        )
+        select
+          (select count(*)::integer from audit_runs where status = 'failed') as failed_audit_runs,
+          (select count(*)::integer from audit_runs where status = 'timeout') as timeout_audit_runs,
+          (select count(*)::integer from timeout_groups where timeout_count >= $1) as repeated_timeout_plugins
+        `,
+        [this.scanTerminalTimeoutAttempts],
+      ),
+      this.pool.query(`
+        select *
+        from (
+          select
+            p.slug as plugin,
+            p.name,
+            sj.target_version as version,
+            'failed'::text as state,
+            sj.attempts,
+            left(coalesce(sj.last_error, ''), 240) as last_error,
+            sj.updated_at,
+            null::timestamptz as completed_at,
+            null::integer as duration_ms
+          from scan_jobs sj
+          join plugins p on p.id = sj.plugin_id
+          where sj.status = 'failed'
+
+          union all
+
+          select
+            p.slug as plugin,
+            p.name,
+            ar.plugin_version as version,
+            ar.status as state,
+            null::integer as attempts,
+            left(coalesce(ar.stderr, ''), 240) as last_error,
+            null::timestamptz as updated_at,
+            ar.completed_at,
+            ar.duration_ms
+          from audit_runs ar
+          join plugins p on p.id = ar.plugin_id
+          where ar.status in ('failed', 'timeout')
+        ) recent_failures
+        order by coalesce(updated_at, completed_at) desc nulls last
+        limit 8
+      `),
+      this.pool.query(`
+        select
+          p.slug as plugin,
+          p.name,
+          ar.plugin_version as version,
+          ar.completed_at,
+          ar.duration_ms,
+          ss.score,
+          ss.total_findings
+        from audit_runs ar
+        join plugins p on p.id = ar.plugin_id
+        left join score_snapshots ss on ss.audit_run_id = ar.id
+        where ar.status = 'complete'
+        order by ar.completed_at desc nulls last, ar.id desc
+        limit 8
+      `),
+    ]);
+
+    const coverageRow = coverageResult.rows[0] ?? {};
+    const queueRow = queueResult.rows[0] ?? {};
+    const storageRow = storageResult.rows[0] ?? {};
+    const distributionRow = distributionResult.rows[0] ?? {};
+    const indexedPlugins = Number(coverageRow.indexed_plugins ?? 0);
+    const auditedPlugins = Number(coverageRow.audited_plugins ?? 0);
+    const queuedJobs = Number(coverageRow.queued_jobs ?? 0);
+    const completedScans24h = Number(queueRow.completed_scans_24h ?? 0);
+    const completedScansPerHour24h = completedScans24h / 24;
+    const estimatedDrainHours = completedScansPerHour24h > 0
+      ? queuedJobs / completedScansPerHour24h
+      : undefined;
+
+    return {
+      generatedAt: new Date().toISOString(),
+      coverage: {
+        indexedPlugins,
+        auditedPlugins,
+        unscannedPlugins: Number(coverageRow.unscanned_plugins ?? 0),
+        completedScans: Number(coverageRow.completed_scans ?? 0),
+        coveragePercent: indexedPlugins > 0 ? Math.round((auditedPlugins / indexedPlugins) * 1000) / 10 : 0,
+        queuedJobs,
+        runningJobs: Number(coverageRow.running_jobs ?? 0),
+        failedJobs: Number(coverageRow.failed_jobs ?? 0),
+        userSubmittedQueuedJobs: Number(coverageRow.user_submitted_queued_jobs ?? 0),
+      },
+      queue: {
+        queuedReadyJobs: Number(queueRow.queued_ready_jobs ?? 0),
+        queuedDelayedJobs: Number(queueRow.queued_delayed_jobs ?? 0),
+        staleRunningJobs: Number(queueRow.stale_running_jobs ?? 0),
+        oldestQueuedAt: optionalIsoDate(queueRow.oldest_queued_at),
+        lastCompletedAt: optionalIsoDate(queueRow.last_completed_at),
+        lastFailedAt: optionalIsoDate(queueRow.last_failed_at),
+        completedScans24h,
+        completedScansPerHour24h: Math.round(completedScansPerHour24h * 100) / 100,
+        averageDurationMs: optionalRoundedNumber(queueRow.average_duration_ms),
+        p95DurationMs: optionalRoundedNumber(queueRow.p95_duration_ms),
+        estimatedDrainHours: estimatedDrainHours === undefined
+          ? undefined
+          : Math.round(estimatedDrainHours * 10) / 10,
+        running: runningResult.rows.map(rowToOperationsRunningJob),
+      },
+      storage: {
+        databaseBytes: Number(storageRow.database_bytes ?? 0),
+        auditFindingsBytes: Number(storageRow.audit_findings_bytes ?? 0),
+        auditRunsBytes: Number(storageRow.audit_runs_bytes ?? 0),
+        scoreSnapshotsBytes: Number(storageRow.score_snapshots_bytes ?? 0),
+        scanJobsBytes: Number(storageRow.scan_jobs_bytes ?? 0),
+        rawReportJsonBytes: Number(storageRow.raw_report_json_bytes ?? 0),
+        stderrBytes: Number(storageRow.stderr_bytes ?? 0),
+        totalFindingRows: Number(distributionRow.total_finding_rows ?? 0),
+        averageFindingsPerStoredAudit: optionalRoundedNumber(distributionRow.average_findings_per_stored_audit),
+        p50FindingsPerStoredAudit: optionalRoundedNumber(distributionRow.p50_findings_per_stored_audit),
+        p90FindingsPerStoredAudit: optionalRoundedNumber(distributionRow.p90_findings_per_stored_audit),
+        p99FindingsPerStoredAudit: optionalRoundedNumber(distributionRow.p99_findings_per_stored_audit),
+        maxFindingsPerStoredAudit: optionalRoundedNumber(distributionRow.max_findings_per_stored_audit),
+      },
+      versions: {
+        apiPluginCheckVersion: this.pluginCheckVersion,
+        scoringModelVersion: SCORING_MODEL_VERSION,
+        pluginCheckVersions: pluginCheckVersionResult.rows.map(rowToOperationsVersionCount),
+        scoringModelVersions: scoringModelVersionResult.rows.map(rowToOperationsVersionCount),
+      },
+      retryPolicy: {
+        runningJobTimeoutSeconds: this.runningJobTimeoutSeconds,
+        runningJobMaxAttempts: this.runningJobMaxAttempts,
+        scanRetryBackoffSeconds: this.scanRetryBackoffSeconds,
+        scanTerminalTimeoutAttempts: this.scanTerminalTimeoutAttempts,
+      },
+      failures: {
+        failedAuditRuns: Number(failureResult.rows[0]?.failed_audit_runs ?? 0),
+        timeoutAuditRuns: Number(failureResult.rows[0]?.timeout_audit_runs ?? 0),
+        repeatedTimeoutPlugins: Number(failureResult.rows[0]?.repeated_timeout_plugins ?? 0),
+        recent: recentFailureResult.rows.map(rowToOperationsRecentFailure),
+      },
+      recentCompleted: recentCompletedResult.rows.map(rowToOperationsRecentScan),
+    };
   }
 
   async listPlugins(options: ListPluginsOptions): Promise<PaginatedResult<PluginSummary>> {
@@ -1783,6 +2061,53 @@ function rowToApiStats(row: Record<string, unknown>): ApiStats {
   };
 }
 
+function rowToOperationsVersionCount(row: Record<string, unknown>): OperationsVersionCount {
+  return {
+    version: String(row.version ?? "unknown"),
+    count: Number(row.count ?? 0),
+  };
+}
+
+function rowToOperationsRunningJob(row: Record<string, unknown>): OperationsRunningJob {
+  return {
+    plugin: String(row.plugin),
+    name: String(row.name),
+    version: String(row.version),
+    reason: String(row.reason),
+    attempts: Number(row.attempts ?? 0),
+    runtimeMs: Number(row.runtime_ms ?? 0),
+    updatedAt: optionalIsoDate(row.updated_at) ?? new Date().toISOString(),
+  };
+}
+
+function rowToOperationsRecentScan(row: Record<string, unknown>): OperationsRecentScan {
+  return {
+    plugin: String(row.plugin),
+    name: String(row.name),
+    version: String(row.version),
+    completedAt: optionalIsoDate(row.completed_at) ?? new Date().toISOString(),
+    durationMs: optionalRoundedNumber(row.duration_ms),
+    score: optionalRoundedNumber(row.score),
+    findings: optionalRoundedNumber(row.total_findings),
+  };
+}
+
+function rowToOperationsRecentFailure(row: Record<string, unknown>): OperationsRecentFailure {
+  const state = String(row.state) === "timeout" ? "timeout" : "failed";
+
+  return {
+    plugin: String(row.plugin),
+    name: String(row.name),
+    version: String(row.version),
+    state,
+    attempts: optionalRoundedNumber(row.attempts),
+    lastError: optionalString(row.last_error),
+    updatedAt: optionalIsoDate(row.updated_at),
+    completedAt: optionalIsoDate(row.completed_at),
+    durationMs: optionalRoundedNumber(row.duration_ms),
+  };
+}
+
 function rowToAuditFindingsRetentionSummary(
   row: Record<string, unknown>,
 ): AuditFindingsRetentionSummary {
@@ -1985,6 +2310,20 @@ function optionalNumber(value: unknown) {
   }
 
   return undefined;
+}
+
+function optionalRoundedNumber(value: unknown) {
+  const number = optionalNumber(value);
+  return number === undefined ? undefined : Math.round(number);
+}
+
+function optionalIsoDate(value: unknown) {
+  if (!value) {
+    return undefined;
+  }
+
+  const parsed = new Date(String(value));
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
 }
 
 function sumRows(rows: Record<string, unknown>[], key: string) {

@@ -4,6 +4,7 @@ import type {
   AuthorDetail,
   AuthorSummary,
   IssueSummary,
+  OperationsSummary,
   PaginatedResult,
   PluginDetail,
   PluginSearchSummary,
@@ -82,6 +83,7 @@ export interface PluginScoreStore {
   health(): Promise<{ ok: true; mode: "memory" | "postgres" }>;
   stats(): Promise<ApiStats>;
   auditFindingsRetention(): Promise<AuditFindingsRetentionSummary>;
+  operationsSummary(): Promise<OperationsSummary>;
   listPlugins(options: ListPluginsOptions): Promise<PaginatedResult<PluginSummary>>;
   getPlugin(slug: string): Promise<PluginDetail | null>;
   getPluginHistory(slug: string, options: GetPluginHistoryOptions): Promise<PluginScoreHistory | null>;

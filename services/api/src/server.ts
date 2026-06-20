@@ -192,6 +192,12 @@ export async function createServer(config: ApiConfig, store: PluginScoreStore) {
     async () => store.auditFindingsRetention(),
   );
 
+  app.get(
+    "/maintenance/operations",
+    { preHandler: requireInternalAuth },
+    async () => store.operationsSummary(),
+  );
+
   app.get("/plugins", async (request) => {
     const query = listPluginsQuery.parse(request.query);
     return store.listPlugins({

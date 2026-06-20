@@ -7,6 +7,7 @@ export type StoreOptions = {
   runningJobMaxAttempts?: number;
   scanRetryBackoffSeconds?: number;
   scanTerminalTimeoutAttempts?: number;
+  pluginCheckVersion?: string;
 };
 
 export function createStore(databaseUrl?: string, options: StoreOptions = {}): PluginScoreStore {

@@ -4,6 +4,7 @@ import type {
   AuthorDetail,
   AuthorSummary,
   IssueSummary,
+  OperationsSummary,
   PaginatedResult,
   PluginDetail,
   PluginSearchSummary,
@@ -201,6 +202,23 @@ export async function getAuditFindingsRetention() {
 
   return fetchFromApi<AuditFindingsRetentionSummary | null>(
     "/maintenance/audit-findings-retention",
+    null,
+    {
+      cache: "no-store",
+      headers: {
+        authorization: `Bearer ${internalApiToken}`,
+      },
+    },
+  );
+}
+
+export async function getOperationsSummary() {
+  if (!internalApiToken) {
+    return null;
+  }
+
+  return fetchFromApi<OperationsSummary | null>(
+    "/maintenance/operations",
     null,
     {
       cache: "no-store",

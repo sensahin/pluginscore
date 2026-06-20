@@ -3,6 +3,7 @@ import type {
   AuditFindingsRetentionSummary,
   AuthorDetail,
   AuthorSummary,
+  OperationsSummary,
   PaginatedResult,
   PluginSearchSummary,
   PluginScoreHistory,
@@ -97,6 +98,64 @@ export class MemoryStore implements PluginScoreStore {
       pluginsWithStaleFindings: 0,
       auditFindingsTableBytes: 0,
       estimatedReusableBytes: 0,
+    };
+  }
+
+  async operationsSummary(): Promise<OperationsSummary> {
+    const stats = await this.stats();
+    const auditedPlugins = stats.auditedPlugins ?? stats.completedScans;
+    const indexedPlugins = stats.indexedPlugins;
+
+    return {
+      generatedAt: new Date().toISOString(),
+      coverage: {
+        indexedPlugins,
+        auditedPlugins,
+        unscannedPlugins: Math.max(0, indexedPlugins - auditedPlugins),
+        completedScans: stats.completedScans,
+        coveragePercent: indexedPlugins > 0 ? Math.round((auditedPlugins / indexedPlugins) * 1000) / 10 : 0,
+        queuedJobs: stats.queuedJobs,
+        runningJobs: stats.runningJobs,
+        failedJobs: stats.failedJobs,
+        userSubmittedQueuedJobs: 0,
+      },
+      queue: {
+        queuedReadyJobs: stats.queuedJobs,
+        queuedDelayedJobs: 0,
+        staleRunningJobs: 0,
+        completedScans24h: 0,
+        completedScansPerHour24h: 0,
+        running: [],
+      },
+      storage: {
+        databaseBytes: 0,
+        auditFindingsBytes: 0,
+        auditRunsBytes: 0,
+        scoreSnapshotsBytes: 0,
+        scanJobsBytes: 0,
+        rawReportJsonBytes: 0,
+        stderrBytes: 0,
+        totalFindingRows: 0,
+      },
+      versions: {
+        apiPluginCheckVersion: "sample",
+        scoringModelVersion: "sample",
+        pluginCheckVersions: [],
+        scoringModelVersions: [],
+      },
+      retryPolicy: {
+        runningJobTimeoutSeconds: 0,
+        runningJobMaxAttempts: 0,
+        scanRetryBackoffSeconds: 0,
+        scanTerminalTimeoutAttempts: 0,
+      },
+      failures: {
+        failedAuditRuns: 0,
+        timeoutAuditRuns: 0,
+        repeatedTimeoutPlugins: 0,
+        recent: [],
+      },
+      recentCompleted: [],
     };
   }
 
