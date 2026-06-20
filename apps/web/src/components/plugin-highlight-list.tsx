@@ -1,8 +1,6 @@
 import {
-  AlertTriangle,
   ArrowDownRight,
   ArrowUpRight,
-  CheckCircle2,
 } from "lucide-react";
 import Link from "next/link";
 import { PluginIcon } from "@/components/plugin-icon";
@@ -46,28 +44,13 @@ export function PluginHighlightList({
               <div className="flex min-w-0 gap-3">
                 <PluginIcon plugin={plugin} />
                 <div className="min-w-0">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <Link
-                      href={`/plugins/${plugin.slug}`}
-                      prefetch={false}
-                      className="truncate font-semibold text-info hover:underline"
-                    >
-                      {plugin.name}
-                    </Link>
-                    {plugin.errors === 0 ? (
-                      <CheckCircle2
-                        size={16}
-                        className="shrink-0 text-good"
-                        aria-label="No errors"
-                      />
-                    ) : (
-                      <AlertTriangle
-                        size={16}
-                        className="shrink-0 text-warn"
-                        aria-label="Needs review"
-                      />
-                    )}
-                  </div>
+                  <Link
+                    href={`/plugins/${plugin.slug}`}
+                    prefetch={false}
+                    className="block truncate font-semibold text-info hover:underline"
+                  >
+                    {plugin.name}
+                  </Link>
                   <p className="mt-1 truncate text-xs text-muted">
                     <span>{plugin.activeInstalls} active installs</span>
                     {plugin.topIssue ? <span> - {plugin.topIssue}</span> : null}
