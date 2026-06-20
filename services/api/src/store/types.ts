@@ -1,5 +1,6 @@
 import type {
   ApiStats,
+  AuditFindingsRetentionSummary,
   AuthorDetail,
   AuthorSummary,
   IssueSummary,
@@ -80,6 +81,7 @@ export type EnqueueJobInput = WordPressPluginMetadata & {
 export interface PluginScoreStore {
   health(): Promise<{ ok: true; mode: "memory" | "postgres" }>;
   stats(): Promise<ApiStats>;
+  auditFindingsRetention(): Promise<AuditFindingsRetentionSummary>;
   listPlugins(options: ListPluginsOptions): Promise<PaginatedResult<PluginSummary>>;
   getPlugin(slug: string): Promise<PluginDetail | null>;
   getPluginHistory(slug: string, options: GetPluginHistoryOptions): Promise<PluginScoreHistory | null>;

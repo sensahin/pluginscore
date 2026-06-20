@@ -1,5 +1,6 @@
 import type {
   ApiStats,
+  AuditFindingsRetentionSummary,
   AuthorDetail,
   AuthorSummary,
   IssueSummary,
@@ -78,6 +79,44 @@ export class PostgresStore implements PluginScoreStore {
     );
 
     return rowToApiStats(result.rows[0] ?? {});
+  }
+
+  async auditFindingsRetention(): Promise<AuditFindingsRetentionSummary> {
+    const result = await this.pool.query(
+      `
+      with counts as (
+        select
+          count(*)::bigint as total_finding_rows,
+          count(*) filter (where pcs.audit_run_id is not null)::bigint as current_finding_rows,
+          count(*) filter (where pcs.audit_run_id is null)::bigint as stale_finding_rows,
+          count(distinct af.audit_run_id) filter (where pcs.audit_run_id is not null)::bigint as current_audit_runs,
+          count(distinct af.audit_run_id) filter (where pcs.audit_run_id is null)::bigint as stale_audit_runs,
+          count(distinct ar.plugin_id) filter (where pcs.audit_run_id is null)::bigint as plugins_with_stale_findings
+        from audit_findings af
+        join audit_runs ar on ar.id = af.audit_run_id
+        left join plugin_current_scores pcs on pcs.audit_run_id = af.audit_run_id
+      ),
+      sizes as (
+        select pg_total_relation_size('audit_findings'::regclass)::bigint as audit_findings_table_bytes
+      )
+      select
+        counts.*,
+        sizes.audit_findings_table_bytes,
+        case
+          when counts.total_finding_rows > 0
+            then round(
+              sizes.audit_findings_table_bytes::numeric
+              * counts.stale_finding_rows::numeric
+              / counts.total_finding_rows::numeric
+            )::bigint
+          else 0::bigint
+        end as estimated_reusable_bytes
+      from counts
+      cross join sizes
+      `,
+    );
+
+    return rowToAuditFindingsRetentionSummary(result.rows[0] ?? {});
   }
 
   async listPlugins(options: ListPluginsOptions): Promise<PaginatedResult<PluginSummary>> {
@@ -1008,6 +1047,7 @@ export class PostgresStore implements PluginScoreStore {
       );
 
       await refreshCurrentScoreForPlugin(client, job.plugin_id);
+      await pruneStaleAuditFindingsForPlugin(client, job.plugin_id);
       await refreshPluginRankSnapshots(client);
 
       await client.query(
@@ -1349,6 +1389,20 @@ async function refreshCurrentScoreForPlugin(client: PoolClient, pluginId: number
   if (result.rowCount === 0) {
     await client.query("delete from plugin_current_scores where plugin_id = $1", [pluginId]);
   }
+}
+
+async function pruneStaleAuditFindingsForPlugin(client: PoolClient, pluginId: number) {
+  await client.query(
+    `
+    delete from audit_findings af
+    using audit_runs ar, plugin_current_scores pcs
+    where af.audit_run_id = ar.id
+      and pcs.plugin_id = ar.plugin_id
+      and ar.plugin_id = $1
+      and af.audit_run_id <> pcs.audit_run_id
+    `,
+    [pluginId],
+  );
 }
 
 async function refreshPluginRankSnapshots(client: PoolClient) {
@@ -1726,6 +1780,23 @@ function rowToApiStats(row: Record<string, unknown>): ApiStats {
     failedJobs: Number(row.failed_jobs ?? 0),
     issueCodes: Number(row.issue_codes ?? 0),
     recentSearches: Number(row.recent_searches ?? 0),
+  };
+}
+
+function rowToAuditFindingsRetentionSummary(
+  row: Record<string, unknown>,
+): AuditFindingsRetentionSummary {
+  return {
+    policy: "latest_scan_findings_per_plugin",
+    dryRun: true,
+    totalFindingRows: Number(row.total_finding_rows ?? 0),
+    currentFindingRows: Number(row.current_finding_rows ?? 0),
+    staleFindingRows: Number(row.stale_finding_rows ?? 0),
+    currentAuditRuns: Number(row.current_audit_runs ?? 0),
+    staleAuditRuns: Number(row.stale_audit_runs ?? 0),
+    pluginsWithStaleFindings: Number(row.plugins_with_stale_findings ?? 0),
+    auditFindingsTableBytes: Number(row.audit_findings_table_bytes ?? 0),
+    estimatedReusableBytes: Number(row.estimated_reusable_bytes ?? 0),
   };
 }
 

@@ -1,5 +1,6 @@
 import type {
   ApiStats,
+  AuditFindingsRetentionSummary,
   AuthorDetail,
   AuthorSummary,
   IssueSummary,
@@ -50,6 +51,7 @@ type HealthStatus = {
 };
 
 const apiBaseUrl = process.env.PLUGINSCORE_API_URL;
+const internalApiToken = process.env.PLUGINSCORE_API_INTERNAL_TOKEN ?? process.env.API_INTERNAL_TOKEN;
 const DEFAULT_API_REVALIDATE_SECONDS = 1_800;
 const PLUGIN_DETAIL_REVALIDATE_SECONDS = 900;
 
@@ -192,6 +194,23 @@ export async function getFreshStats() {
   return fetchFromApi<ApiStats>("/stats", sampleStats, { cache: "no-store" });
 }
 
+export async function getAuditFindingsRetention() {
+  if (!internalApiToken) {
+    return null;
+  }
+
+  return fetchFromApi<AuditFindingsRetentionSummary | null>(
+    "/maintenance/audit-findings-retention",
+    null,
+    {
+      cache: "no-store",
+      headers: {
+        authorization: `Bearer ${internalApiToken}`,
+      },
+    },
+  );
+}
+
 export async function getIssues() {
   const issues = await fetchFromApi<IssueSummary[]>("/issues", sampleIssues);
   return issues.map(enrichIssueSummary);
@@ -264,7 +283,7 @@ export async function getIssue(code: string) {
 async function fetchFromApi<T>(
   path: string,
   fallback: T,
-  options: { cache?: RequestCache; revalidate?: number } = {},
+  options: { cache?: RequestCache; headers?: HeadersInit; revalidate?: number } = {},
 ): Promise<T> {
   if (!apiBaseUrl) {
     return fallback;
@@ -276,6 +295,7 @@ async function fetchFromApi<T>(
       : { next: { revalidate: options.revalidate ?? DEFAULT_API_REVALIDATE_SECONDS } };
     const response = await fetch(new URL(path, apiBaseUrl), {
       ...fetchOptions,
+      headers: options.headers,
     });
 
     if (response.status === 404) {

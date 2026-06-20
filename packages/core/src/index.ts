@@ -1,5 +1,6 @@
 export type {
   ApiStats,
+  AuditFindingsRetentionSummary,
   AuthorDetail,
   AuthorSummary,
   AuditRunSummary,

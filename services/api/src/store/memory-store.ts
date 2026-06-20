@@ -1,5 +1,6 @@
 import type {
   ApiStats,
+  AuditFindingsRetentionSummary,
   AuthorDetail,
   AuthorSummary,
   PaginatedResult,
@@ -81,6 +82,21 @@ export class MemoryStore implements PluginScoreStore {
       failedJobs: queueJobs.filter((job) => job.status === "failed").length,
       issueCodes: issues.length,
       recentSearches: this.searchEvents.length,
+    };
+  }
+
+  async auditFindingsRetention(): Promise<AuditFindingsRetentionSummary> {
+    return {
+      policy: "latest_scan_findings_per_plugin",
+      dryRun: true,
+      totalFindingRows: 0,
+      currentFindingRows: 0,
+      staleFindingRows: 0,
+      currentAuditRuns: 0,
+      staleAuditRuns: 0,
+      pluginsWithStaleFindings: 0,
+      auditFindingsTableBytes: 0,
+      estimatedReusableBytes: 0,
     };
   }
 

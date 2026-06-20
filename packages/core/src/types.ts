@@ -167,6 +167,19 @@ export type ApiStats = {
   recentSearches: number;
 };
 
+export type AuditFindingsRetentionSummary = {
+  policy: "latest_scan_findings_per_plugin";
+  dryRun: true;
+  totalFindingRows: number;
+  currentFindingRows: number;
+  staleFindingRows: number;
+  currentAuditRuns: number;
+  staleAuditRuns: number;
+  pluginsWithStaleFindings: number;
+  auditFindingsTableBytes: number;
+  estimatedReusableBytes: number;
+};
+
 export type TrackedPluginSummary = {
   slug: string;
   version?: string;

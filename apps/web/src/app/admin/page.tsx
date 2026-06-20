@@ -4,9 +4,10 @@ import {
   Database,
   Gauge,
   ShieldCheck,
+  Wrench,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { getFreshStats, getHealth, getQueue } from "@/lib/api";
+import { getAuditFindingsRetention, getFreshStats, getHealth, getQueue } from "@/lib/api";
 
 export const metadata = {
   title: "Admin",
@@ -16,11 +17,14 @@ export const metadata = {
   },
 };
 
+export const dynamic = "force-dynamic";
+
 export default async function AdminPage() {
-  const [health, stats, queueJobs] = await Promise.all([
+  const [health, stats, queueJobs, retention] = await Promise.all([
     getHealth(),
     getFreshStats(),
     getQueue(20),
+    getAuditFindingsRetention(),
   ]);
   const metrics = [
     { label: "Indexed plugins", value: stats.indexedPlugins.toLocaleString(), detail: "metadata rows" },
@@ -83,16 +87,38 @@ export default async function AdminPage() {
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[320px_1fr]">
-        <aside className="rounded-md border border-line bg-surface p-5">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-semibold">Backend Health</h2>
-            <Activity size={18} className="text-muted" aria-hidden="true" />
-          </div>
-          <div className="mt-4 divide-y divide-line text-sm">
-            <Meta label="API URL" value={health.apiUrl ?? "sample data"} />
-            <Meta label="Status" value={health.ok ? "ok" : "fallback"} />
-            <Meta label="Mode" value={health.mode ?? "sample"} />
-          </div>
+        <aside className="space-y-4">
+          <section className="rounded-md border border-line bg-surface p-5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-semibold">Backend Health</h2>
+              <Activity size={18} className="text-muted" aria-hidden="true" />
+            </div>
+            <div className="mt-4 divide-y divide-line text-sm">
+              <Meta label="API URL" value={health.apiUrl ?? "sample data"} />
+              <Meta label="Status" value={health.ok ? "ok" : "fallback"} />
+              <Meta label="Mode" value={health.mode ?? "sample"} />
+            </div>
+          </section>
+
+          <section className="rounded-md border border-line bg-surface p-5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-semibold">Maintenance</h2>
+              <Wrench size={18} className="text-muted" aria-hidden="true" />
+            </div>
+            {retention ? (
+              <div className="mt-4 divide-y divide-line text-sm">
+                <Meta label="Policy" value="latest findings" />
+                <Meta label="Stale findings" value={retention.staleFindingRows.toLocaleString()} />
+                <Meta label="Stale audits" value={retention.staleAuditRuns.toLocaleString()} />
+                <Meta label="Affected plugins" value={retention.pluginsWithStaleFindings.toLocaleString()} />
+                <Meta label="Reusable DB space" value={formatBytes(retention.estimatedReusableBytes)} />
+              </div>
+            ) : (
+              <p className="mt-4 text-sm leading-6 text-muted">
+                Internal maintenance check is not configured for this deployment.
+              </p>
+            )}
+          </section>
         </aside>
 
         <section className="rounded-md border border-line bg-surface">
@@ -156,4 +182,21 @@ function Meta({ label, value }: { label: string; value: string }) {
       </span>
     </div>
   );
+}
+
+function formatBytes(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "0 B";
+  }
+
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let unitIndex = 0;
+
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+
+  return `${value >= 10 ? Math.round(value) : value.toFixed(1)} ${units[unitIndex]}`;
 }
