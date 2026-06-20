@@ -2,7 +2,6 @@ import { CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { PluginIcon } from "@/components/plugin-icon";
 import { ScoreBadge } from "@/components/score-badge";
-import { TagChips } from "@/components/tag-chips";
 import type { PluginSummary } from "@/lib/plugin-score-data";
 
 export function PluginListTable({
@@ -56,9 +55,6 @@ export function PluginListTable({
                         {plugin.name}
                       </span>
                     </Link>
-                    <div className="mt-2">
-                      <TagChips tags={plugin.tags} limit={3} size="xs" />
-                    </div>
                   </td>
                   <td className="px-4 py-4 text-right">
                     {plugin.audited === false ? (
