@@ -9,6 +9,7 @@ import {
 } from "../../../ranking-page-view";
 
 export const revalidate = 1_800;
+export const dynamic = "force-static";
 
 type RankingKindPaginatedPageProps = {
   params: Promise<{ kind: string; page: string }>;

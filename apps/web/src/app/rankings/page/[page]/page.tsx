@@ -8,6 +8,7 @@ import {
 } from "../../ranking-page-view";
 
 export const revalidate = 1_800;
+export const dynamic = "force-static";
 
 type RankingsPaginatedPageProps = {
   params: Promise<{ page: string }>;

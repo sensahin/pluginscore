@@ -9,6 +9,7 @@ import {
 } from "../../../author-page-view";
 
 export const revalidate = 1_800;
+export const dynamic = "force-static";
 
 type AuthorSortPaginatedPageProps = {
   params: Promise<{ author: string; sort: string; page: string }>;

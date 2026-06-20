@@ -8,6 +8,7 @@ import {
 import { pageFromSegment } from "@/lib/pagination";
 
 export const revalidate = 1_800;
+export const dynamic = "force-static";
 
 type TagPaginatedPageProps = {
   params: Promise<{ tag: string; page: string }>;
