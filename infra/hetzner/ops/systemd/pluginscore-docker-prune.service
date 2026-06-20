@@ -1,0 +1,8 @@
+[Unit]
+Description=Prune PluginScore Docker build cache
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/pluginscore/infra/hetzner/ops/pluginscore-docker-prune.sh

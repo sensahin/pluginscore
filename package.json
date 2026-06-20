@@ -1,0 +1,30 @@
+{
+  "name": "pluginscore",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/web",
+    "packages/*",
+    "services/*"
+  ],
+  "scripts": {
+    "build": "npm run build:packages && npm run build -w services/api && npm run build -w services/scanner && npm run build -w services/scheduler && npm run build -w apps/web",
+    "build:packages": "npm run build -w @pluginscore/core && npm run build -w @pluginscore/scoring && npm run build -w @pluginscore/wporg",
+    "ci": "npm run typecheck && npm run lint && npm run build",
+    "lint": "npm run lint -w apps/web",
+    "typecheck": "npm run build:packages && npm run typecheck -w @pluginscore/core && npm run typecheck -w @pluginscore/scoring && npm run typecheck -w @pluginscore/wporg && npm run typecheck -w services/api && npm run typecheck -w services/scanner && npm run typecheck -w services/scheduler",
+    "dev:web": "npm run build:packages && npm run dev -w apps/web",
+    "dev:api": "npm run build:packages && npm run dev -w services/api",
+    "scanner:seed": "npm run build:packages && npm run seed -w services/scanner",
+    "scanner:once": "npm run build:packages && npm run scan:once -w services/scanner",
+    "scheduler:once": "npm run build:packages && npm run sync:once -w services/scheduler",
+    "scheduler:work": "npm run build:packages && npm run work -w services/scheduler",
+    "prod:status": "bash infra/hetzner/status.sh",
+    "prod:dns": "bash infra/hetzner/configure-vercel-dns.sh"
+  },
+  "devDependencies": {
+    "next": "^16.2.9",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  }
+}

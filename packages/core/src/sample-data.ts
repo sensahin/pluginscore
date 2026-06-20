@@ -1,0 +1,349 @@
+import type { IssueSummary, PluginDetail, PluginSummary, QueueJob, ScoreBand } from "./types.js";
+import { enrichIssueSummary } from "./issue-catalog.js";
+
+export const plugins: PluginDetail[] = [
+  {
+    slug: "search-url-beautifier",
+    name: "Search URL Beautifier",
+    shortDescription: "Normalizes WordPress search URLs into cleaner, crawlable paths.",
+    author: "Senol Sahin",
+    requiresWp: "6.4",
+    testedWp: "6.8",
+    requiresPhp: "8.0",
+    rating: 100,
+    ratingCount: 8,
+    version: "1.3.0",
+    score: 100,
+    previousScore: 99,
+    activeInstalls: "1k+",
+    downloads: "18k",
+    lastUpdated: "2026-06-14",
+    findings: 0,
+    errors: 0,
+    warnings: 0,
+    topIssue: "No open findings",
+    band: "excellent",
+    tags: [
+      { slug: "search", name: "search" },
+      { slug: "seo", name: "SEO" },
+      { slug: "urls", name: "URLs" },
+    ],
+    scores: {
+      security: 100,
+      repo: 100,
+      performance: 100,
+      maintainability: 100,
+    },
+    latestAudit: {
+      id: 1,
+      status: "complete",
+      pluginVersion: "1.3.0",
+      pluginCheckVersion: "2.0.0",
+      scoringModelVersion: "2026.06-mvp-static-v1",
+      durationMs: 2800,
+      exitCode: 0,
+      timedOut: false,
+      rawReportStored: true,
+      completedAt: "2026-06-14T12:00:00.000Z",
+    },
+    topFindings: [],
+  },
+  {
+    slug: "akismet",
+    name: "Akismet Anti-spam",
+    shortDescription:
+      "Spam protection for comments and forms, maintained by Automattic.",
+    iconUrl: "https://ps.w.org/akismet/assets/icon-256x256.png",
+    bannerUrl: "https://ps.w.org/akismet/assets/banner-1544x500.png",
+    author: "Automattic",
+    authorUrl: "https://profiles.wordpress.org/automattic/",
+    homepageUrl: "https://akismet.com/",
+    requiresWp: "5.8",
+    testedWp: "7.0",
+    requiresPhp: "7.2",
+    rating: 94,
+    ratingCount: 1184,
+    supportThreads: 16,
+    supportThreadsResolved: 16,
+    version: "5.4",
+    score: 88,
+    previousScore: 86,
+    activeInstalls: "5m+",
+    downloads: "260m",
+    lastUpdated: "2026-06-08",
+    findings: 134,
+    errors: 35,
+    warnings: 99,
+    topIssue: "Text domain mismatch",
+    band: "good",
+    tags: [
+      { slug: "anti-spam", name: "anti-spam" },
+      { slug: "comments", name: "comments" },
+      { slug: "contact-form", name: "contact form" },
+      { slug: "spam", name: "spam" },
+    ],
+    scores: {
+      security: 84,
+      repo: 90,
+      performance: 95,
+      maintainability: 82,
+    },
+    latestAudit: {
+      id: 2,
+      status: "complete",
+      pluginVersion: "5.4",
+      pluginCheckVersion: "2.0.0",
+      scoringModelVersion: "2026.06-mvp-static-v1",
+      durationMs: 12140,
+      exitCode: 1,
+      timedOut: false,
+      sourceSha256: "a56a0ecf8f3b8f4fb8021cc5d6f816cb2e04f9e7a58f05bca517a4f24e789c3d",
+      rawReportStored: true,
+      completedAt: "2026-06-08T11:20:00.000Z",
+      stderrPreview: "Plugin Check completed with findings.",
+    },
+    topFindings: [
+      {
+        code: "PluginCheck.I18n.TextDomainMismatch",
+        title: "Text Domain Mismatch",
+        family: "Maintainability",
+        severity: "warning",
+        count: 38,
+        sampleMessage: "Translation call uses a text domain that does not match the plugin slug.",
+      },
+      {
+        code: "WordPress.Security.EscapeOutput.OutputNotEscaped",
+        title: "Unescaped Output",
+        family: "Security",
+        severity: "error",
+        count: 21,
+        sampleMessage: "All output should be run through an escaping function.",
+      },
+    ],
+  },
+  {
+    slug: "contact-form-7",
+    name: "Contact Form 7",
+    shortDescription:
+      "Flexible contact form management with Ajax submission, CAPTCHA, and spam filtering integrations.",
+    iconUrl: "https://ps.w.org/contact-form-7/assets/icon-256x256.png",
+    author: "Takayuki Miyoshi",
+    requiresWp: "6.5",
+    testedWp: "6.8",
+    requiresPhp: "7.4",
+    rating: 80,
+    ratingCount: 2100,
+    version: "6.1",
+    score: 79,
+    previousScore: 77,
+    activeInstalls: "10m+",
+    downloads: "340m",
+    lastUpdated: "2026-06-06",
+    findings: 98,
+    errors: 59,
+    warnings: 39,
+    topIssue: "Direct file access",
+    band: "watch",
+    tags: [
+      { slug: "contact-form", name: "contact form" },
+      { slug: "forms", name: "forms" },
+      { slug: "spam", name: "spam" },
+    ],
+  },
+  {
+    slug: "wordpress-seo",
+    name: "Yoast SEO",
+    shortDescription:
+      "SEO tools for metadata, sitemaps, structured data, readability, and search appearance.",
+    iconUrl: "https://ps.w.org/wordpress-seo/assets/icon-256x256.gif?rev=3419908",
+    author: "Team Yoast",
+    homepageUrl: "https://yoast.com/wordpress/plugins/seo/",
+    requiresWp: "6.5",
+    testedWp: "6.8",
+    requiresPhp: "7.4",
+    rating: 96,
+    ratingCount: 27900,
+    version: "25.2",
+    score: 74,
+    previousScore: 73,
+    activeInstalls: "10m+",
+    downloads: "480m",
+    lastUpdated: "2026-06-11",
+    findings: 544,
+    errors: 159,
+    warnings: 385,
+    topIssue: "Prefixing and escaping",
+    band: "watch",
+    tags: [
+      { slug: "seo", name: "SEO" },
+      { slug: "sitemap", name: "sitemap" },
+      { slug: "schema", name: "schema" },
+    ],
+  },
+  {
+    slug: "updraftplus",
+    name: "UpdraftPlus",
+    shortDescription:
+      "Backup, restore, and migration tooling for WordPress sites.",
+    iconUrl: "https://ps.w.org/updraftplus/assets/icon-256x256.jpg?rev=1686200",
+    author: "TeamUpdraft",
+    requiresWp: "5.8",
+    testedWp: "6.8",
+    requiresPhp: "7.4",
+    rating: 96,
+    ratingCount: 7500,
+    version: "1.25.5",
+    score: 69,
+    previousScore: 71,
+    activeInstalls: "3m+",
+    downloads: "115m",
+    lastUpdated: "2026-06-10",
+    findings: 576,
+    errors: 277,
+    warnings: 299,
+    topIssue: "Prepared SQL checks",
+    band: "watch",
+    tags: [
+      { slug: "backup", name: "backup" },
+      { slug: "migration", name: "migration" },
+      { slug: "restore", name: "restore" },
+    ],
+  },
+  {
+    slug: "wordfence",
+    name: "Wordfence Security",
+    shortDescription:
+      "Firewall, malware scanning, login security, and threat intelligence for WordPress.",
+    iconUrl: "https://ps.w.org/wordfence/assets/icon-256x256.png",
+    author: "Wordfence",
+    requiresWp: "5.8",
+    testedWp: "6.8",
+    requiresPhp: "7.4",
+    rating: 94,
+    ratingCount: 4200,
+    version: "8.1",
+    score: 63,
+    previousScore: 61,
+    activeInstalls: "5m+",
+    downloads: "320m",
+    lastUpdated: "2026-06-05",
+    findings: 4565,
+    errors: 1593,
+    warnings: 2972,
+    topIssue: "Large warning clusters",
+    band: "risk",
+    tags: [
+      { slug: "firewall", name: "firewall" },
+      { slug: "malware", name: "malware" },
+      { slug: "security", name: "security" },
+    ],
+  },
+];
+
+const baseIssues: IssueSummary[] = [
+  {
+    code: "WordPress.Security.EscapeOutput.OutputNotEscaped",
+    title: "Unescaped Output",
+    family: "Security",
+    weight: "critical",
+    affectedPlugins: 42,
+    explanation:
+      "Dynamic output reaches the browser without an escaping function appropriate for its context.",
+    fix: "Escape late with esc_html(), esc_attr(), esc_url(), wp_kses(), or a narrower context-specific API.",
+  },
+  {
+    code: "WordPress.Security.NonceVerification.Missing",
+    title: "Missing Nonce Verification",
+    family: "Security",
+    weight: "high",
+    affectedPlugins: 31,
+    explanation:
+      "A request handler reads user input without proving the request was intentionally created by WordPress.",
+    fix: "Use check_admin_referer(), check_ajax_referer(), or wp_verify_nonce() before mutating state.",
+  },
+  {
+    code: "WordPress.DB.PreparedSQL.NotPrepared",
+    title: "SQL Not Prepared",
+    family: "Security",
+    weight: "critical",
+    affectedPlugins: 18,
+    explanation:
+      "A database query contains dynamic values without $wpdb->prepare() or a safer query builder.",
+    fix: "Parameterize dynamic values and keep table or column names constrained to trusted allowlists.",
+  },
+  {
+    code: "PluginCheck.CodeAnalysis.DirectFileAccess.Missing",
+    title: "Direct File Access Guard Missing",
+    family: "Repo Compliance",
+    weight: "medium",
+    affectedPlugins: 57,
+    explanation:
+      "A PHP file can be loaded directly outside WordPress, bypassing expected bootstrap protections.",
+    fix: "Add an ABSPATH or defined constant guard at the top of executable PHP files.",
+  },
+  {
+    code: "PluginCheck.I18n.TextDomainMismatch",
+    title: "Text Domain Mismatch",
+    family: "Maintainability",
+    weight: "low",
+    affectedPlugins: 76,
+    explanation:
+      "Translation calls use a text domain that does not match the plugin slug or declared domain.",
+    fix: "Normalize translation domains and bundled translation files around the plugin slug.",
+  },
+];
+
+export const issues: IssueSummary[] = baseIssues.map(enrichIssueSummary);
+
+export const queue: QueueJob[] = [
+  {
+    plugin: "woocommerce",
+    version: "9.9",
+    state: "running",
+    reason: "version changed",
+    runtime: "02:18",
+  },
+  {
+    plugin: "google-site-kit",
+    version: "1.156",
+    state: "queued",
+    reason: "top 100 seed",
+    runtime: "-",
+  },
+  {
+    plugin: "wpforms-lite",
+    version: "1.9.6",
+    state: "queued",
+    reason: "top 100 seed",
+    runtime: "-",
+  },
+  {
+    plugin: "advanced-custom-fields",
+    version: "6.4",
+    state: "failed",
+    reason: "timeout retry pending",
+    runtime: "45:00",
+  },
+];
+
+export function scoreDelta(plugin: PluginSummary) {
+  return plugin.score - plugin.previousScore;
+}
+
+export function scoreBandLabel(band: ScoreBand) {
+  return {
+    excellent: "Excellent",
+    good: "Good",
+    watch: "Watch",
+    risk: "Risk",
+  }[band];
+}
+
+export function findPlugin(slug: string) {
+  return plugins.find((plugin) => plugin.slug === slug);
+}
+
+export function findIssue(code: string) {
+  const decodedCode = decodeURIComponent(code);
+  return issues.find((issue) => issue.code === decodedCode);
+}

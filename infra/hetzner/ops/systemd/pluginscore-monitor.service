@@ -1,0 +1,10 @@
+[Unit]
+Description=PluginScore backend monitor
+Wants=docker.service network-online.target
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/pluginscore
+EnvironmentFile=-/opt/pluginscore/infra/hetzner/ops/monitor.env
+ExecStart=/opt/pluginscore/infra/hetzner/ops/pluginscore-monitor.sh

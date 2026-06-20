@@ -1,0 +1,159 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pluginscore
+      POSTGRES_USER: pluginscore
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pluginscore -d pluginscore"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  scanner-db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: pluginscore_wp
+      MARIADB_USER: wordpress
+      MARIADB_PASSWORD: ${WP_DB_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${WP_DB_ROOT_PASSWORD}
+    volumes:
+      - scanner-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -u wordpress --password=$$MARIADB_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    image: pluginscore/api:latest
+    build:
+      context: ../..
+      dockerfile: services/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://pluginscore:${POSTGRES_PASSWORD}@postgres:5432/pluginscore
+      NODE_ENV: production
+      API_INTERNAL_TOKEN: ${API_INTERNAL_TOKEN}
+      SEARCH_RATE_LIMIT_PER_MINUTE: ${SEARCH_RATE_LIMIT_PER_MINUTE:-60}
+      SUBMISSION_RATE_LIMIT_PER_MINUTE: ${SUBMISSION_RATE_LIMIT_PER_MINUTE:-6}
+      API_BODY_LIMIT_BYTES: ${API_BODY_LIMIT_BYTES:-52428800}
+      RUNNING_JOB_TIMEOUT_SECONDS: ${RUNNING_JOB_TIMEOUT_SECONDS:-1800}
+      RUNNING_JOB_MAX_ATTEMPTS: ${RUNNING_JOB_MAX_ATTEMPTS:-3}
+      PLUGIN_CHECK_VERSION: ${PLUGIN_CHECK_VERSION:-2.0.0}
+    ports:
+      - "127.0.0.1:4010:4010"
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+    environment:
+      API_DOMAIN: ${API_DOMAIN:-api.pluginscore.com}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+  migrate:
+    image: pluginscore/api:latest
+    build:
+      context: ../..
+      dockerfile: services/api/Dockerfile
+    profiles: ["tools"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://pluginscore:${POSTGRES_PASSWORD}@postgres:5432/pluginscore
+      API_INTERNAL_TOKEN: ${API_INTERNAL_TOKEN}
+      API_BODY_LIMIT_BYTES: ${API_BODY_LIMIT_BYTES:-52428800}
+    working_dir: /app/services/api
+    command: ["node", "dist/migrate.js"]
+
+  scanner:
+    image: pluginscore/scanner:latest
+    build:
+      context: ../..
+      dockerfile: services/scanner/Dockerfile
+      args:
+        PLUGIN_CHECK_VERSION: ${PLUGIN_CHECK_VERSION:-2.0.0}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+      scanner-db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://pluginscore:${POSTGRES_PASSWORD}@postgres:5432/pluginscore
+      PLUGINSCORE_API_URL: http://api:4010
+      API_INTERNAL_TOKEN: ${API_INTERNAL_TOKEN}
+      SCAN_CONCURRENCY: "1"
+      SCAN_IDLE_SECONDS: ${SCAN_IDLE_SECONDS:-60}
+      SCAN_TIMEOUT_SECONDS: ${SCAN_TIMEOUT_SECONDS:-600}
+      PLUGIN_CHECK_VERSION: ${PLUGIN_CHECK_VERSION:-2.0.0}
+      PLUGIN_CHECK_COMMAND: /usr/local/bin/run-plugin-check {pluginDir} {jsonPath}
+      PLUGIN_CHECK_MODE: ${PLUGIN_CHECK_MODE:-new}
+      PLUGIN_CHECK_CATEGORIES: ${PLUGIN_CHECK_CATEGORIES:-}
+      PLUGIN_CHECK_CHECKS: ${PLUGIN_CHECK_CHECKS:-}
+      PLUGIN_CHECK_EXCLUDE_CHECKS: ${PLUGIN_CHECK_EXCLUDE_CHECKS:-}
+      PLUGIN_CHECK_IGNORE_CODES: ${PLUGIN_CHECK_IGNORE_CODES:-}
+      WP_PATH: /opt/wordpress
+      WP_DB_HOST: scanner-db:3306
+      WP_DB_NAME: pluginscore_wp
+      WP_DB_USER: wordpress
+      WP_DB_PASSWORD: ${WP_DB_PASSWORD}
+      WP_URL: http://pluginscore.local
+      WP_TITLE: PluginScore Scanner
+      WP_ADMIN_USER: pluginscore
+      WP_ADMIN_PASSWORD: ${WP_ADMIN_PASSWORD}
+      WP_ADMIN_EMAIL: ${WP_ADMIN_EMAIL:-scanner@pluginscore.local}
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 3g
+
+  scheduler:
+    image: pluginscore/scheduler:latest
+    build:
+      context: ../..
+      dockerfile: services/scheduler/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+    environment:
+      PLUGINSCORE_API_URL: http://api:4010
+      API_INTERNAL_TOKEN: ${API_INTERNAL_TOKEN}
+      PLUGIN_CHECK_VERSION: ${PLUGIN_CHECK_VERSION:-2.0.0}
+      SCHEDULER_LIMIT: ${SCHEDULER_LIMIT:-1000}
+      SCHEDULER_INTERVAL_SECONDS: ${SCHEDULER_INTERVAL_SECONDS:-3600}
+      SCHEDULER_PRIORITY: ${SCHEDULER_PRIORITY:-100}
+      SCHEDULER_WATCH_TRACKED: ${SCHEDULER_WATCH_TRACKED:-true}
+      SCHEDULER_TRACKED_LIMIT: ${SCHEDULER_TRACKED_LIMIT:-5000}
+      SCHEDULER_TRACKED_PRIORITY: ${SCHEDULER_TRACKED_PRIORITY:-80}
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512m
+
+volumes:
+  postgres-data:
+  scanner-db-data:
+  caddy-data:
+  caddy-config:

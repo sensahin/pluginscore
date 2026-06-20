@@ -1,0 +1,477 @@
+openapi: 3.1.0
+info:
+  title: PluginScore API
+  version: 0.1.0
+components:
+  securitySchemes:
+    internalBearer:
+      type: http
+      scheme: bearer
+      description: Shared internal token for scanner and scheduler services.
+  schemas:
+    EnqueueJob:
+      type: object
+      required: [slug, name, version, downloadLink]
+      properties:
+        slug:
+          type: string
+        name:
+          type: string
+        shortDescription:
+          type: string
+        iconUrl:
+          type: string
+          format: uri
+        bannerUrl:
+          type: string
+          format: uri
+        author:
+          type: string
+        authorUrl:
+          type: string
+          format: uri
+        homepageUrl:
+          type: string
+          format: uri
+        requiresWp:
+          type: string
+        testedWp:
+          type: string
+        requiresPhp:
+          type: string
+        rating:
+          type: integer
+          minimum: 0
+          maximum: 100
+        ratingCount:
+          type: integer
+          minimum: 0
+        supportThreads:
+          type: integer
+          minimum: 0
+        supportThreadsResolved:
+          type: integer
+          minimum: 0
+        tags:
+          type: array
+          items:
+            type: object
+            required: [slug, name]
+            properties:
+              slug:
+                type: string
+              name:
+                type: string
+        version:
+          type: string
+        activeInstalls:
+          type: integer
+          minimum: 0
+        downloaded:
+          type: integer
+          minimum: 0
+        lastUpdated:
+          type: string
+        downloadLink:
+          type: string
+          format: uri
+        reason:
+          type: string
+          default: manual
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 1000
+        pluginCheckVersion:
+          type: string
+        scoringModelVersion:
+          type: string
+        force:
+          type: boolean
+          default: false
+    CompleteJob:
+      type: object
+      required:
+        - pluginVersion
+        - pluginCheckVersion
+        - scoringModelVersion
+        - sourceDownloadUrl
+        - durationMs
+        - exitCode
+        - findings
+      properties:
+        pluginVersion:
+          type: string
+        pluginCheckVersion:
+          type: string
+        scoringModelVersion:
+          type: string
+        sourceDownloadUrl:
+          type: string
+          format: uri
+        sourceSha256:
+          type: string
+        durationMs:
+          type: integer
+          minimum: 0
+        exitCode:
+          type: integer
+        rawReportObjectKey:
+          type: string
+        rawReport:
+          description: Raw parseable Plugin Check report JSON retained for audit traceability.
+        stderr:
+          type: string
+        findings:
+          type: array
+          items:
+            type: object
+    PluginSummary:
+      type: object
+      required: [slug, name, version, score, activeInstalls, downloads, lastUpdated, findings, errors, warnings, band, audited]
+      properties:
+        slug:
+          type: string
+        name:
+          type: string
+        shortDescription:
+          type: string
+        iconUrl:
+          type: string
+          format: uri
+        author:
+          type: string
+        version:
+          type: string
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        previousScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+        activeInstalls:
+          type: string
+        downloads:
+          type: string
+        lastUpdated:
+          type: string
+        scannedAt:
+          type: string
+          format: date-time
+        findings:
+          type: integer
+        errors:
+          type: integer
+        warnings:
+          type: integer
+        topIssue:
+          type: string
+        band:
+          type: string
+          enum: [excellent, good, watch, risk]
+        audited:
+          type: boolean
+    PaginatedPluginSummaries:
+      type: object
+      required: [items, page, perPage, total, totalPages, hasNextPage, hasPreviousPage]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PluginSummary"
+        page:
+          type: integer
+          minimum: 1
+        perPage:
+          type: integer
+          minimum: 1
+        total:
+          type: integer
+          minimum: 0
+        totalPages:
+          type: integer
+          minimum: 1
+        hasNextPage:
+          type: boolean
+        hasPreviousPage:
+          type: boolean
+        nextCursor:
+          type: string
+paths:
+  /health:
+    get:
+      summary: Backend health check
+      responses:
+        "200":
+          description: Service health
+  /stats:
+    get:
+      summary: Public aggregate index and worker stats
+      responses:
+        "200":
+          description: Aggregate plugin, scan, queue, issue, and search counts
+  /plugins:
+    get:
+      summary: List plugin score summaries
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: perPage
+          in: query
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 500
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 500
+          description: Legacy alias for perPage.
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [score_desc, score_asc, downloads_desc, installs_desc, updated_desc, scanned_desc, issues_desc, delta_desc]
+        - name: audited
+          in: query
+          schema:
+            type: boolean
+        - name: tag
+          in: query
+          schema:
+            type: string
+          description: Optional tag slug filter.
+        - name: author
+          in: query
+          schema:
+            type: string
+          description: Optional exact author-name filter.
+        - name: issueCode
+          in: query
+          schema:
+            type: string
+          description: Optional current-audit issue-code filter.
+        - name: issueFamily
+          in: query
+          schema:
+            type: string
+          description: Optional current-audit issue-family slug filter.
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: Optional slug, name, short description, author, or tag search text.
+      responses:
+        "200":
+          description: Paginated plugin score summaries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedPluginSummaries"
+  /plugins/{slug}:
+    get:
+      summary: Read one plugin profile
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Plugin profile with latest audit
+  /plugins/{slug}/history:
+    get:
+      summary: Read score history for one plugin
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        "200":
+          description: Chronological score snapshots with plugin, Plugin Check, and scoring model versions
+  /tags:
+    get:
+      summary: List WordPress.org plugin tags indexed by PluginScore
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+            maximum: 500
+        - name: minimumPlugins
+          in: query
+          schema:
+            type: integer
+            default: 1
+      responses:
+        "200":
+          description: Tag summaries with plugin counts and aggregate score metadata
+  /tags/{tag}:
+    get:
+      summary: Read one tag and plugins in that tag
+      parameters:
+        - name: tag
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [score_desc, installs_desc, scanned_desc, issues_desc]
+            default: score_desc
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+            maximum: 500
+      responses:
+        "200":
+          description: Tag detail with sorted plugin summaries
+  /searches/recent:
+    get:
+      summary: List recently searched plugin profiles
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 4
+            maximum: 20
+      responses:
+        "200":
+          description: Recently searched known plugins with search counts
+  /searches:
+    post:
+      summary: Record an anonymous plugin search
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slug]
+              properties:
+                slug:
+                  type: string
+      responses:
+        "202":
+          description: Search recorded for a known plugin
+        "429":
+          description: Per-IP search recording rate limit exceeded
+        "404":
+          description: Plugin is not indexed yet, so no search was recorded
+  /queue:
+    get:
+      summary: List sanitized scan queue status
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 8
+            maximum: 50
+      responses:
+        "200":
+          description: Queue jobs with plugin slug, version, state, reason, and display runtime
+  /issues/{code}:
+    get:
+      summary: Read one normalized finding code
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Issue definition, guidance, and affected plugins
+  /jobs:
+    post:
+      summary: Refresh plugin metadata and enqueue a missing scan
+      security:
+        - internalBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnqueueJob"
+      responses:
+        "401":
+          description: Internal bearer token required
+        "200":
+          description: Existing queued, running, or already-audited version reused
+        "202":
+          description: Scan job accepted
+  /jobs/next:
+    get:
+      summary: Claim the next queued scan job
+      security:
+        - internalBearer: []
+      responses:
+        "200":
+          description: Scan job claimed
+        "204":
+          description: No queued jobs
+        "401":
+          description: Internal bearer token required
+  /jobs/{id}/complete:
+    post:
+      summary: Mark a scan job complete and persist findings
+      security:
+        - internalBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompleteJob"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Scan results persisted
+        "401":
+          description: Internal bearer token required
+  /jobs/{id}/fail:
+    post:
+      summary: Mark a scan job failed
+      security:
+        - internalBearer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Failure persisted
+        "401":
+          description: Internal bearer token required

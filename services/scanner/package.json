@@ -1,0 +1,23 @@
+{
+  "name": "@pluginscore/scanner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "seed": "tsx src/index.ts seed",
+    "scan:once": "tsx src/index.ts scan-once",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@pluginscore/core": "*",
+    "@pluginscore/scoring": "*",
+    "@pluginscore/wporg": "*",
+    "dotenv": "^17.2.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.27",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
