@@ -1,6 +1,7 @@
 import { CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { PluginIcon } from "@/components/plugin-icon";
+import { RelativeDate } from "@/components/relative-date";
 import { ScoreBadge } from "@/components/score-badge";
 import type { PluginSummary } from "@/lib/plugin-score-data";
 
@@ -88,8 +89,8 @@ export function PluginListTable({
                   <td className="px-4 py-4 text-right font-mono">
                     {plugin.activeInstalls}
                   </td>
-                  <td className="px-4 py-4 text-right font-mono text-xs text-muted">
-                    {plugin.lastUpdated}
+                  <td className="px-4 py-4 text-right text-xs text-muted">
+                    <RelativeDate value={plugin.lastUpdated} />
                   </td>
                   <td className="max-w-[28ch] truncate px-4 py-4 text-muted">
                     {plugin.audited === false ? "Pending scan" : plugin.topIssue}

@@ -14,12 +14,13 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { PluginIcon } from "@/components/plugin-icon";
+import { RelativeDate } from "@/components/relative-date";
 import { PluginSubmissionAction } from "@/components/plugin-submission-action";
 import { RelatedPluginTabs, type RelatedPluginTab } from "@/components/related-plugin-tabs";
 import { TagChips } from "@/components/tag-chips";
 import { getAuthor, getPlugins } from "@/lib/api";
 import { groupFindingCodeCounts } from "@/lib/finding-groups";
-import { formatShortDate, formatSlugTitle } from "@/lib/formatting";
+import { formatExactDate, formatShortDate, formatSlugTitle } from "@/lib/formatting";
 import {
   sortPluginSummaries,
   uniquePluginsBySlug,
@@ -205,12 +206,12 @@ function PluginSummaryHeader({
             ) : null}
             <IconMeta
               icon={<Calendar size={16} />}
-              value={`Updated ${plugin.lastUpdated}`}
+              value={<>Updated <RelativeDate value={plugin.lastUpdated} /></>}
             />
             {plugin.addedAt ? (
               <IconMeta
                 icon={<Calendar size={16} />}
-                value={`Added ${formatShortDate(plugin.addedAt)}`}
+                value={<>Added <RelativeDate value={plugin.addedAt} /></>}
               />
             ) : null}
             <IconMeta
@@ -250,7 +251,7 @@ function IconMeta({
   href,
 }: {
   icon?: ReactNode;
-  value: string;
+  value: ReactNode;
   href?: string;
 }) {
   const content = (
@@ -606,7 +607,7 @@ function ScoreHistory({
         {history.length === 1 && latest ? (
           <div className="rounded-md border border-dashed border-line p-5">
             <p className="text-sm font-medium">
-              First scan completed {formatShortDate(latest.scannedAt)}
+              First scan completed <RelativeDate value={latest.scannedAt} />
             </p>
             <p className="mt-2 break-words text-sm leading-6 text-muted">
               v{latest.pluginVersion} · Plugin Check {latest.pluginCheckVersion} · Model {latest.scoringModelVersion}
@@ -716,7 +717,9 @@ function ScoreHistoryTable({ points }: { points: PluginScoreHistoryPoint[] }) {
           <div key={point.auditRunId} className="rounded-md border border-line bg-background p-4">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm font-medium">{formatShortDate(point.scannedAt)}</p>
+                <p className="text-sm font-medium">
+                  <RelativeDate value={point.scannedAt} />
+                </p>
                 <p className="mt-1 font-mono text-xs text-muted">v{point.pluginVersion}</p>
               </div>
               <div className="text-right">
@@ -753,7 +756,9 @@ function ScoreHistoryTable({ points }: { points: PluginScoreHistoryPoint[] }) {
             {newestFirst.map((point, index) => (
               <tr key={point.auditRunId} className="border-b border-line last:border-b-0">
                 <td className="px-3 py-4">
-                  <span className="block font-medium">{formatShortDate(point.scannedAt)}</span>
+                  <span className="block font-medium">
+                    <RelativeDate value={point.scannedAt} />
+                  </span>
                   {index === 0 ? <span className="mt-1 block text-xs text-muted">Latest</span> : null}
                 </td>
                 <td className="px-3 py-4 text-right font-mono font-semibold">{point.score}</td>
@@ -895,7 +900,7 @@ function PluginMetadata({
         />
         <MetaRow
           label="Added"
-          value={plugin.addedAt ? formatShortDate(plugin.addedAt) : undefined}
+          value={plugin.addedAt ? <RelativeDate value={plugin.addedAt} /> : undefined}
         />
         <MetaRow label="Requires WP" value={plugin.requiresWp} />
         <MetaRow label="Tested up to" value={plugin.testedWp} />
@@ -929,7 +934,7 @@ function MetaRow({
   icon,
 }: {
   label: string;
-  value?: string;
+  value?: ReactNode;
   href?: string;
   icon?: ReactNode;
 }) {
@@ -976,7 +981,7 @@ function isExternalHref(href: string) {
 
 function scorePointTitle(point: PluginScoreHistoryPoint) {
   return [
-    formatShortDate(point.scannedAt),
+    formatExactDate(point.scannedAt),
     `Score ${point.score}/100`,
     `Plugin v${point.pluginVersion}`,
     `Plugin Check ${point.pluginCheckVersion}`,

@@ -3,10 +3,11 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
 import { PluginIcon } from "@/components/plugin-icon";
+import { RelativeDate } from "@/components/relative-date";
 import { ScoreBadge } from "@/components/score-badge";
 import { parseCompactNumber } from "@/lib/compare";
 import { groupFindingCodeCounts } from "@/lib/finding-groups";
-import { formatShortDate } from "@/lib/formatting";
+import { formatExactDate } from "@/lib/formatting";
 import { formatPluginDirectoryAge } from "@/lib/plugin-age";
 
 export type ComparisonEntry = {
@@ -63,7 +64,7 @@ export function ComparisonPageView({ entries }: { entries: ComparisonEntry[] }) 
               },
               {
                 label: "Last updated",
-                values: entries.map((entry) => formatShortDate(entry.plugin.lastUpdated)),
+                values: entries.map((entry) => <RelativeDate key={entry.plugin.slug} value={entry.plugin.lastUpdated} />),
               },
               {
                 label: "Directory age",
@@ -141,7 +142,7 @@ export function ComparisonPageView({ entries }: { entries: ComparisonEntry[] }) 
               },
               {
                 label: "Added to WP.org",
-                values: entries.map((entry) => formatShortDate(entry.plugin.addedAt)),
+                values: entries.map((entry) => <RelativeDate key={entry.plugin.slug} value={entry.plugin.addedAt} />),
               },
               {
                 label: "Requires WP",
@@ -194,7 +195,7 @@ function VerdictGrid({ entries }: { entries: ComparisonEntry[] }) {
     {
       label: "Latest update",
       entry: maxBy(entries, (entry) => Date.parse(entry.plugin.lastUpdated || "")),
-      value: (entry: ComparisonEntry) => formatShortDate(entry.plugin.lastUpdated),
+      value: (entry: ComparisonEntry) => <RelativeDate value={entry.plugin.lastUpdated} />,
     },
   ];
 
@@ -466,7 +467,9 @@ function HistoryComparison({ entries }: { entries: ComparisonEntry[] }) {
                           </Link>
                         </span>
                       </td>
-                      <td className="px-3 py-4">{formatShortDate(point.scannedAt)}</td>
+                      <td className="px-3 py-4">
+                        <RelativeDate value={point.scannedAt} />
+                      </td>
                       <td className="px-3 py-4 text-right font-mono font-semibold">
                         {point.score}
                       </td>
@@ -621,7 +624,9 @@ function latestScanValue(entry: ComparisonEntry) {
 
   return (
     <span className="block min-w-0">
-      <span className="block">{formatShortDate(latest.scannedAt)}</span>
+      <span className="block">
+        <RelativeDate value={latest.scannedAt} />
+      </span>
       <span className="mt-1 block break-all font-mono text-xs text-muted">
         Check {latest.pluginCheckVersion} / Model {latest.scoringModelVersion}
       </span>
@@ -676,7 +681,7 @@ function formatOptional(value?: string) {
 function scorePointTitle(plugin: PluginDetail, point: PluginScoreHistoryPoint) {
   return [
     plugin.name,
-    formatShortDate(point.scannedAt),
+    formatExactDate(point.scannedAt),
     `Score ${point.score}/100`,
     `Plugin v${point.pluginVersion}`,
     `Plugin Check ${point.pluginCheckVersion}`,
