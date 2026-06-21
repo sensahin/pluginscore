@@ -319,6 +319,56 @@ export type PluginSubmissionResult = {
   pluginUrl: string;
 };
 
+export type PluginReportType =
+  | "incorrect_metadata"
+  | "score_looks_wrong"
+  | "false_positive_issue"
+  | "missing_issue"
+  | "plugin_updated"
+  | "other";
+
+export type PluginReportStatus = "new" | "triaged" | "resolved" | "spam";
+
+export type PluginReportInput = {
+  pluginSlug: string;
+  pluginVersion?: string;
+  auditRunId?: number;
+  reportType: PluginReportType;
+  message: string;
+  contactEmail?: string;
+  ipHash?: string;
+  userAgent?: string;
+};
+
+export type PluginReportUpdateInput = {
+  status?: PluginReportStatus;
+  adminNotes?: string;
+};
+
+export type PluginReport = {
+  id: number;
+  pluginSlug: string;
+  pluginName?: string;
+  pluginVersion: string;
+  auditRunId?: number;
+  reportType: PluginReportType;
+  message: string;
+  contactEmail?: string;
+  status: PluginReportStatus;
+  adminNotes?: string;
+  userAgent?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PluginReportStats = {
+  total: number;
+  new: number;
+  triaged: number;
+  resolved: number;
+  spam: number;
+};
+
 export type IssueReference = {
   label: string;
   href: string;

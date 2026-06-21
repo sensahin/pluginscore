@@ -6,6 +6,7 @@ import {
   Gauge,
   HardDrive,
   History,
+  MessageSquareWarning,
   RotateCcw,
   ShieldCheck,
   Timer,
@@ -18,6 +19,7 @@ import {
   getFreshStats,
   getHealth,
   getOperationsSummary,
+  getPluginReportStats,
   getQueue,
 } from "@/lib/api";
 
@@ -32,12 +34,13 @@ export const metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
-  const [health, stats, queueJobs, retention, operations] = await Promise.all([
+  const [health, stats, queueJobs, retention, operations, reportStats] = await Promise.all([
     getHealth(),
     getFreshStats(),
     getQueue(20),
     getAuditFindingsRetention(),
     getOperationsSummary(),
+    getPluginReportStats(),
   ]);
   const metrics = [
     { label: "Indexed plugins", value: stats.indexedPlugins.toLocaleString(), detail: "metadata rows" },
@@ -123,10 +126,22 @@ export default async function AdminPage() {
             </p>
           </div>
           <div className="rounded-md border border-line bg-background px-3 py-2 text-sm">
-            <span className="inline-flex items-center gap-2 font-medium">
-              <ShieldCheck size={16} aria-hidden="true" />
-              Basic auth
-            </span>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href="/admin/reports"
+                className="inline-flex items-center gap-2 font-medium transition hover:text-brand"
+              >
+                <MessageSquareWarning size={16} aria-hidden="true" />
+                Reports
+                {reportStats ? (
+                  <span className="font-mono text-muted">({reportStats.new.toLocaleString()} new)</span>
+                ) : null}
+              </Link>
+              <span className="inline-flex items-center gap-2 font-medium text-muted">
+                <ShieldCheck size={16} aria-hidden="true" />
+                Basic auth
+              </span>
+            </div>
           </div>
         </div>
       </section>

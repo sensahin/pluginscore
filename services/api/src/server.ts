@@ -1,7 +1,7 @@
 import cors from "@fastify/cors";
 import { SCORING_MODEL_VERSION } from "@pluginscore/scoring";
 import { fetchPluginBySlug, normalizeWordPressPluginSlug } from "@pluginscore/wporg";
-import { timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { ApiConfig } from "./config.js";
@@ -44,6 +44,31 @@ const pluginHistoryQuery = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 
+const reportTypeSchema = z.enum([
+  "incorrect_metadata",
+  "score_looks_wrong",
+  "false_positive_issue",
+  "missing_issue",
+  "plugin_updated",
+  "other",
+]);
+
+const reportStatusSchema = z.enum(["new", "triaged", "resolved", "spam"]);
+
+const listPluginReportsQuery = z.object({
+  page: z.coerce.number().int().min(1).max(10000).default(1),
+  perPage: z.coerce.number().int().min(1).max(100).default(25),
+  status: reportStatusSchema.optional(),
+  reportType: reportTypeSchema.optional(),
+  pluginSlug: z.string().trim().min(1).max(200).optional(),
+  hasContactEmail: z.enum(["true", "false"]).optional().transform((value) => {
+    if (value === undefined) return undefined;
+    return value === "true";
+  }),
+  createdFrom: z.string().trim().min(1).max(32).optional(),
+  createdTo: z.string().trim().min(1).max(32).optional(),
+});
+
 const listRecentSearchesQuery = z.object({
   limit: z.coerce.number().int().min(1).max(20).default(4),
 });
@@ -71,6 +96,31 @@ const recordSearchBody = z.object({
 const submitPluginBody = z.object({
   input: z.string().trim().min(1).max(260).optional(),
   slug: z.string().trim().min(1).max(260).optional(),
+});
+
+const contactEmail = z.preprocess(
+  (value) => (typeof value === "string" && value.trim() ? value.trim() : undefined),
+  z.string().email().max(254).optional(),
+);
+
+const submitPluginReportBody = z.object({
+  pluginVersion: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() ? value.trim() : undefined),
+    z.string().max(120).optional(),
+  ),
+  auditRunId: z.coerce.number().int().positive().optional(),
+  reportType: reportTypeSchema,
+  message: z.string().trim().min(10).max(2000),
+  contactEmail,
+  website: z.string().max(200).optional(),
+});
+
+const updatePluginReportBody = z.object({
+  status: reportStatusSchema.optional(),
+  adminNotes: z.preprocess(
+    (value) => (typeof value === "string" ? value.trim() : undefined),
+    z.string().max(2000).optional(),
+  ),
 });
 
 const optionalText = z.preprocess(
@@ -181,6 +231,10 @@ export async function createServer(config: ApiConfig, store: PluginScoreStore) {
     limit: config.submissionRateLimitPerMinute,
     windowMs: 60_000,
   });
+  const reportRateLimiter = createFixedWindowRateLimiter({
+    limit: config.reportRateLimitPerMinute,
+    windowMs: 60_000,
+  });
 
   app.get("/health", async () => store.health());
 
@@ -234,6 +288,49 @@ export async function createServer(config: ApiConfig, store: PluginScoreStore) {
     }
 
     return history;
+  });
+
+  app.post("/plugins/:slug/reports", async (request, reply) => {
+    const { slug: rawSlug } = z.object({ slug: z.string() }).parse(request.params);
+    const slug = normalizeSlug(rawSlug);
+
+    if (!slug) {
+      return reply.code(400).send({ error: "invalid_plugin_slug" });
+    }
+
+    if (!reportRateLimiter.consume(`${request.ip}:${slug}`)) {
+      return reply
+        .code(429)
+        .header("Retry-After", "60")
+        .send({ error: "rate_limited" });
+    }
+
+    const body = submitPluginReportBody.parse(request.body);
+
+    if (body.website?.trim()) {
+      return reply.code(202).send({ submitted: true });
+    }
+
+    if (isUrlHeavy(body.message)) {
+      return reply.code(400).send({ error: "too_many_links" });
+    }
+
+    const report = await store.createPluginReport({
+      pluginSlug: slug,
+      pluginVersion: body.pluginVersion,
+      auditRunId: body.auditRunId,
+      reportType: body.reportType,
+      message: body.message,
+      contactEmail: body.contactEmail,
+      ipHash: hashIp(request.ip, config.reportIpHashSecret),
+      userAgent: truncateHeader(request.headers["user-agent"]),
+    });
+
+    if (!report) {
+      return reply.code(404).send({ error: "plugin_not_found" });
+    }
+
+    return reply.code(201).send({ submitted: true, reportId: report.id });
   });
 
   app.post("/plugins/submissions", async (request, reply) => {
@@ -338,6 +435,36 @@ export async function createServer(config: ApiConfig, store: PluginScoreStore) {
     return reply.code(result.recorded ? 202 : 404).send(result);
   });
 
+  app.get("/reports", { preHandler: requireInternalAuth }, async (request) => {
+    const query = listPluginReportsQuery.parse(request.query);
+    return store.listPluginReports({
+      page: query.page,
+      perPage: query.perPage,
+      status: query.status,
+      reportType: query.reportType,
+      pluginSlug: query.pluginSlug ? normalizeSlug(query.pluginSlug) : undefined,
+      hasContactEmail: query.hasContactEmail,
+      createdFrom: query.createdFrom,
+      createdTo: query.createdTo,
+    });
+  });
+
+  app.get("/reports/stats", { preHandler: requireInternalAuth }, async () => {
+    return store.pluginReportStats();
+  });
+
+  app.patch("/reports/:id", { preHandler: requireInternalAuth }, async (request, reply) => {
+    const { id } = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
+    const body = updatePluginReportBody.parse(request.body);
+    const report = await store.updatePluginReport(id, body);
+
+    if (!report) {
+      return reply.code(404).send({ error: "report_not_found" });
+    }
+
+    return report;
+  });
+
   app.get("/queue", async (request) => {
     const query = listQueueQuery.parse(request.query);
     return store.listQueue(query);
@@ -418,6 +545,24 @@ function normalizeSlug(slug: string) {
     .replace(/\/$/, "")
     .replace(/[^a-z0-9-]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+function hashIp(ip: string, secret?: string) {
+  if (!secret) {
+    return undefined;
+  }
+
+  return createHmac("sha256", secret).update(ip).digest("hex");
+}
+
+function truncateHeader(value: string | string[] | undefined) {
+  const text = Array.isArray(value) ? value.join(", ") : value;
+  return text ? text.slice(0, 500) : undefined;
+}
+
+function isUrlHeavy(message: string) {
+  const matches = message.match(/https?:\/\/|www\.|[a-z0-9-]+\.[a-z]{2,}\//gi) ?? [];
+  return matches.length > 2;
 }
 
 function createFixedWindowRateLimiter({

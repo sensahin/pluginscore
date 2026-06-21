@@ -7,6 +7,11 @@ import type {
   OperationsSummary,
   PaginatedResult,
   PluginDetail,
+  PluginReport,
+  PluginReportStats,
+  PluginReportStatus,
+  PluginReportType,
+  PluginReportUpdateInput,
   PluginSearchSummary,
   PluginScoreHistory,
   PluginSummary,
@@ -44,6 +49,16 @@ type PluginsPageOptions = {
   author?: string;
   issueCode?: string;
   issueFamily?: string;
+};
+type PluginReportsPageOptions = {
+  page?: number;
+  perPage?: number;
+  status?: PluginReportStatus;
+  reportType?: PluginReportType;
+  pluginSlug?: string;
+  hasContactEmail?: boolean;
+  createdFrom?: string;
+  createdTo?: string;
 };
 type HealthStatus = {
   ok: boolean;
@@ -232,6 +247,103 @@ export async function getOperationsSummary() {
   );
 }
 
+export async function getPluginReports({
+  page = 1,
+  perPage = 25,
+  status,
+  reportType,
+  pluginSlug,
+  hasContactEmail,
+  createdFrom,
+  createdTo,
+}: PluginReportsPageOptions = {}) {
+  if (!internalApiToken) {
+    return emptyPaginatedResult<PluginReport>(page, perPage);
+  }
+
+  const params = new URLSearchParams({
+    page: String(Math.max(1, page)),
+    perPage: String(Math.max(1, perPage)),
+  });
+
+  if (status) {
+    params.set("status", status);
+  }
+
+  if (reportType) {
+    params.set("reportType", reportType);
+  }
+
+  if (pluginSlug?.trim()) {
+    params.set("pluginSlug", pluginSlug.trim());
+  }
+
+  if (hasContactEmail !== undefined) {
+    params.set("hasContactEmail", String(hasContactEmail));
+  }
+
+  if (createdFrom?.trim()) {
+    params.set("createdFrom", createdFrom.trim());
+  }
+
+  if (createdTo?.trim()) {
+    params.set("createdTo", createdTo.trim());
+  }
+
+  return fetchFromApi<PaginatedResult<PluginReport>>(
+    `/reports?${params.toString()}`,
+    emptyPaginatedResult<PluginReport>(page, perPage),
+    {
+      cache: "no-store",
+      headers: {
+        authorization: `Bearer ${internalApiToken}`,
+      },
+    },
+  );
+}
+
+export async function getPluginReportStats() {
+  if (!internalApiToken) {
+    return null;
+  }
+
+  return fetchFromApi<PluginReportStats | null>(
+    "/reports/stats",
+    null,
+    {
+      cache: "no-store",
+      headers: {
+        authorization: `Bearer ${internalApiToken}`,
+      },
+    },
+  );
+}
+
+export async function updatePluginReport(
+  id: number,
+  input: PluginReportUpdateInput,
+) {
+  if (!apiBaseUrl || !internalApiToken) {
+    throw new Error("Internal API is not configured.");
+  }
+
+  const response = await fetch(new URL(`/reports/${id}`, apiBaseUrl), {
+    method: "PATCH",
+    headers: {
+      authorization: `Bearer ${internalApiToken}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(input),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Report update failed: ${response.status}`);
+  }
+
+  return (await response.json()) as PluginReport;
+}
+
 export async function getIssues() {
   const issues = await fetchFromApi<IssueSummary[]>("/issues", sampleIssues);
   return issues.map(enrichIssueSummary);
@@ -340,6 +452,18 @@ async function fetchFromApi<T>(
 
     throw error;
   }
+}
+
+function emptyPaginatedResult<T>(page: number, perPage: number): PaginatedResult<T> {
+  return {
+    items: [],
+    page,
+    perPage,
+    total: 0,
+    totalPages: 1,
+    hasNextPage: false,
+    hasPreviousPage: false,
+  };
 }
 
 function sortSamplePlugins(plugins: PluginDetail[], sort: PluginSort, query?: string) {

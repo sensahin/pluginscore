@@ -5,6 +5,10 @@ import type {
   AuthorSummary,
   OperationsSummary,
   PaginatedResult,
+  PluginReport,
+  PluginReportInput,
+  PluginReportStats,
+  PluginReportUpdateInput,
   PluginSearchSummary,
   PluginScoreHistory,
   ScanCompletePayload,
@@ -17,6 +21,7 @@ import type {
 import { findIssue, findPlugin, issues, plugins, queue as sampleQueue } from "@pluginscore/core/sample-data";
 import type {
   EnqueueJobInput,
+  ListPluginReportsOptions,
   ListQueueOptions,
   ListAuthorsOptions,
   ListRecentSearchesOptions,
@@ -52,7 +57,9 @@ export class MemoryStore implements PluginScoreStore {
   private jobs: MemoryJob[] = [];
   private completedAudits: CompletedAudit[] = [];
   private searchEvents: SearchEvent[] = [];
+  private reports: PluginReport[] = [];
   private nextJobId = 1;
+  private nextReportId = 1;
 
   async health() {
     return { ok: true as const, mode: "memory" as const };
@@ -293,6 +300,81 @@ export class MemoryStore implements PluginScoreStore {
       searchedAt: new Date(Date.now() - index * 60_000).toISOString(),
       searchCount: 1,
     }));
+  }
+
+  async createPluginReport(input: PluginReportInput): Promise<PluginReport | null> {
+    const plugin = findPlugin(input.pluginSlug);
+
+    if (!plugin) {
+      return null;
+    }
+
+    const now = new Date().toISOString();
+    const report: PluginReport = {
+      id: this.nextReportId++,
+      pluginSlug: plugin.slug,
+      pluginName: plugin.name,
+      pluginVersion: input.pluginVersion?.trim() || plugin.version,
+      auditRunId: input.auditRunId ?? plugin.latestAudit?.id,
+      reportType: input.reportType,
+      message: input.message,
+      contactEmail: input.contactEmail,
+      status: "new",
+      userAgent: input.userAgent,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.reports.unshift(report);
+    return report;
+  }
+
+  async listPluginReports(options: ListPluginReportsOptions): Promise<PaginatedResult<PluginReport>> {
+    const pluginSlug = options.pluginSlug?.trim().toLowerCase();
+    const createdFrom = parseDateMs(options.createdFrom);
+    const createdTo = parseDateMs(options.createdTo, true);
+    const filtered = this.reports.filter((report) => {
+      if (options.status && report.status !== options.status) return false;
+      if (options.reportType && report.reportType !== options.reportType) return false;
+      if (pluginSlug && !report.pluginSlug.toLowerCase().includes(pluginSlug)) return false;
+      if (options.hasContactEmail === true && !report.contactEmail) return false;
+      if (options.hasContactEmail === false && report.contactEmail) return false;
+      const createdAt = Date.parse(report.createdAt);
+      if (createdFrom !== undefined && createdAt < createdFrom) return false;
+      if (createdTo !== undefined && createdAt >= createdTo) return false;
+      return true;
+    });
+
+    return paginateItems(filtered, options.page, options.perPage);
+  }
+
+  async pluginReportStats(): Promise<PluginReportStats> {
+    return {
+      total: this.reports.length,
+      new: this.reports.filter((report) => report.status === "new").length,
+      triaged: this.reports.filter((report) => report.status === "triaged").length,
+      resolved: this.reports.filter((report) => report.status === "resolved").length,
+      spam: this.reports.filter((report) => report.status === "spam").length,
+    };
+  }
+
+  async updatePluginReport(id: number, input: PluginReportUpdateInput): Promise<PluginReport | null> {
+    const report = this.reports.find((candidate) => candidate.id === id);
+
+    if (!report) {
+      return null;
+    }
+
+    if (input.status) {
+      report.status = input.status;
+    }
+
+    if (input.adminNotes !== undefined) {
+      report.adminNotes = input.adminNotes;
+    }
+
+    report.updatedAt = new Date().toISOString();
+    return report;
   }
 
   async listAuthors(options: ListAuthorsOptions): Promise<AuthorSummary[]> {
@@ -564,6 +646,23 @@ function normalizeTagSlug(value: string) {
 function normalizeSearchQuery(query?: string) {
   const normalized = query ? normalizeSearchText(query) : undefined;
   return normalized ? normalized : undefined;
+}
+
+function parseDateMs(value?: string, exclusiveEnd = false) {
+  if (!value) {
+    return undefined;
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return undefined;
+  }
+
+  if (exclusiveEnd) {
+    parsed.setUTCDate(parsed.getUTCDate() + 1);
+  }
+
+  return parsed.getTime();
 }
 
 function scoreDelta(plugin: (typeof plugins)[number]) {

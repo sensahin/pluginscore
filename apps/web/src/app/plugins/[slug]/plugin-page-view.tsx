@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { PluginIcon } from "@/components/plugin-icon";
+import { PluginReportCard } from "@/components/plugin-report-card";
 import { RelativeDate } from "@/components/relative-date";
 import { PluginSubmissionAction } from "@/components/plugin-submission-action";
 import { RelatedPluginTabs, type RelatedPluginTab } from "@/components/related-plugin-tabs";
@@ -78,6 +79,12 @@ export async function PluginPageView({
           <div className="space-y-6">
             <PluginRankings plugin={plugin} />
             <PluginMetadata plugin={plugin} supportRate={supportRate} />
+            <PluginReportCard
+              pluginSlug={plugin.slug}
+              pluginName={plugin.name}
+              pluginVersion={plugin.version}
+              auditRunId={plugin.latestAudit?.id}
+            />
           </div>
         </section>
       </div>
@@ -481,7 +488,7 @@ function IssuesDetails({ plugin }: { plugin: PluginDetail }) {
   }
 
   return (
-    <section className="rounded-md border border-line bg-surface shadow-sm">
+    <section id="score-history" className="rounded-md border border-line bg-surface shadow-sm">
       <div className="flex items-center justify-between gap-4 border-b border-line p-5">
         <div>
           <h2 className="text-base font-semibold">Issues Details</h2>

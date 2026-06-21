@@ -17,6 +17,10 @@ import type {
   OperationsUserSubmission,
   OperationsVersionCount,
   PluginSearchSummary,
+  PluginReport,
+  PluginReportInput,
+  PluginReportStats,
+  PluginReportUpdateInput,
   PluginSummary,
   QueueJob,
   ScanCompletePayload,
@@ -39,6 +43,7 @@ import type {
   EnqueueJobInput,
   ListAuthorsOptions,
   ListQueueOptions,
+  ListPluginReportsOptions,
   ListRecentSearchesOptions,
   ListTagsOptions,
   GetPluginHistoryOptions,
@@ -773,6 +778,157 @@ export class PostgresStore implements PluginScoreStore {
     );
 
     return result.rows.map(rowToPluginSearchSummary);
+  }
+
+  async createPluginReport(input: PluginReportInput): Promise<PluginReport | null> {
+    return withTransaction(this.pool, async (client) => {
+      const pluginResult = await client.query<{
+        id: number;
+        slug: string;
+        name: string;
+        current_version: string;
+        audit_run_id: number | null;
+      }>(
+        `
+        select
+          p.id,
+          p.slug,
+          p.name,
+          p.current_version,
+          pcs.audit_run_id
+        from plugins p
+        left join plugin_current_scores pcs on pcs.plugin_id = p.id
+        where p.slug = $1
+        limit 1
+        `,
+        [input.pluginSlug],
+      );
+      const plugin = pluginResult.rows[0];
+
+      if (!plugin) {
+        return null;
+      }
+
+      const requestedAuditRunId = input.auditRunId ?? plugin.audit_run_id;
+      const auditRunId = requestedAuditRunId
+        ? await validateAuditRunId(client, plugin.id, requestedAuditRunId)
+        : null;
+      const result = await client.query(
+        `
+        insert into plugin_reports (
+          plugin_id, plugin_slug, plugin_version, audit_run_id,
+          report_type, message, contact_email, ip_hash, user_agent
+        )
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        returning
+          id, plugin_slug, $10::text as plugin_name, plugin_version,
+          audit_run_id, report_type, message, contact_email, status,
+          admin_notes, user_agent, created_at, updated_at
+        `,
+        [
+          plugin.id,
+          plugin.slug,
+          input.pluginVersion?.trim() || plugin.current_version,
+          auditRunId,
+          input.reportType,
+          input.message,
+          input.contactEmail ?? null,
+          input.ipHash ?? null,
+          input.userAgent ?? null,
+          plugin.name,
+        ],
+      );
+
+      return result.rows[0] ? rowToPluginReport(result.rows[0]) : null;
+    });
+  }
+
+  async listPluginReports(options: ListPluginReportsOptions): Promise<PaginatedResult<PluginReport>> {
+    const page = Math.max(1, options.page);
+    const perPage = Math.max(1, options.perPage);
+    const values: unknown[] = [];
+    const where = buildPluginReportWhere(options, values);
+    const countResult = await this.pool.query(
+      `
+      select count(*)::integer as total
+      from plugin_reports pr
+      where ${where}
+      `,
+      values,
+    );
+    const total = Number(countResult.rows[0]?.total ?? 0);
+    const limitParam = values.push(perPage);
+    const offsetParam = values.push((page - 1) * perPage);
+    const result = await this.pool.query(
+      `
+      ${pluginReportSelectSql()}
+      from plugin_reports pr
+      left join plugins p on p.id = pr.plugin_id
+      where ${where}
+      order by pr.created_at desc, pr.id desc
+      limit $${limitParam}
+      offset $${offsetParam}
+      `,
+      values,
+    );
+
+    return toPaginatedResult(result.rows.map(rowToPluginReport), total, page, perPage);
+  }
+
+  async pluginReportStats(): Promise<PluginReportStats> {
+    const result = await this.pool.query(
+      `
+      select
+        count(*)::integer as total,
+        count(*) filter (where status = 'new')::integer as new,
+        count(*) filter (where status = 'triaged')::integer as triaged,
+        count(*) filter (where status = 'resolved')::integer as resolved,
+        count(*) filter (where status = 'spam')::integer as spam
+      from plugin_reports
+      `,
+    );
+    const row = result.rows[0] ?? {};
+
+    return {
+      total: Number(row.total ?? 0),
+      new: Number(row.new ?? 0),
+      triaged: Number(row.triaged ?? 0),
+      resolved: Number(row.resolved ?? 0),
+      spam: Number(row.spam ?? 0),
+    };
+  }
+
+  async updatePluginReport(
+    id: number,
+    input: PluginReportUpdateInput,
+  ): Promise<PluginReport | null> {
+    const result = await this.pool.query(
+      `
+      update plugin_reports pr
+      set
+        status = coalesce($2, pr.status),
+        admin_notes = coalesce($3, pr.admin_notes),
+        updated_at = now()
+      where pr.id = $1
+      returning
+        pr.id,
+        pr.plugin_slug,
+        (select p.name from plugins p where p.id = pr.plugin_id) as plugin_name,
+        pr.plugin_version,
+        pr.audit_run_id,
+        pr.report_type,
+        pr.message,
+        pr.contact_email,
+        pr.status,
+        pr.admin_notes,
+        pr.user_agent,
+        pr.created_at,
+        pr.updated_at
+      `,
+      [id, input.status ?? null, input.adminNotes ?? null],
+    );
+
+    return result.rows[0] ? rowToPluginReport(result.rows[0]) : null;
   }
 
   async listAuthors(options: ListAuthorsOptions): Promise<AuthorSummary[]> {
@@ -1680,6 +1836,25 @@ async function getCurrentIssueCodesForPlugin(client: PoolClient, pluginId: numbe
   return result.rows.map((row) => row.code);
 }
 
+async function validateAuditRunId(
+  client: PoolClient,
+  pluginId: number,
+  auditRunId: number,
+) {
+  const result = await client.query<{ id: number }>(
+    `
+    select id
+    from audit_runs
+    where id = $1
+      and plugin_id = $2
+    limit 1
+    `,
+    [auditRunId, pluginId],
+  );
+
+  return result.rows[0]?.id ?? null;
+}
+
 async function refreshCurrentScoreForPlugin(client: PoolClient, pluginId: number) {
   const result = await client.query(
     `
@@ -2016,6 +2191,65 @@ function pluginTagsSelectSql() {
   `;
 }
 
+function pluginReportSelectSql() {
+  return `
+      select
+        pr.id,
+        pr.plugin_slug,
+        coalesce(p.name, pr.plugin_slug) as plugin_name,
+        pr.plugin_version,
+        pr.audit_run_id,
+        pr.report_type,
+        pr.message,
+        pr.contact_email,
+        pr.status,
+        pr.admin_notes,
+        pr.user_agent,
+        pr.created_at,
+        pr.updated_at
+  `;
+}
+
+function buildPluginReportWhere(
+  options: ListPluginReportsOptions,
+  values: unknown[],
+) {
+  const where = ["true"];
+
+  if (options.status) {
+    const param = values.push(options.status);
+    where.push(`pr.status = $${param}`);
+  }
+
+  if (options.reportType) {
+    const param = values.push(options.reportType);
+    where.push(`pr.report_type = $${param}`);
+  }
+
+  if (options.pluginSlug?.trim()) {
+    const param = values.push(`%${escapeLikePattern(options.pluginSlug.trim())}%`);
+    where.push(`pr.plugin_slug ilike $${param} escape '\\'`);
+  }
+
+  if (options.hasContactEmail !== undefined) {
+    where.push(options.hasContactEmail ? "pr.contact_email is not null" : "pr.contact_email is null");
+  }
+
+  const createdFrom = parseFilterDate(options.createdFrom);
+  if (createdFrom) {
+    const param = values.push(createdFrom);
+    where.push(`pr.created_at >= $${param}::timestamptz`);
+  }
+
+  const createdTo = parseFilterDate(options.createdTo);
+  if (createdTo) {
+    const param = values.push(createdTo);
+    where.push(`pr.created_at < $${param}::timestamptz + interval '1 day'`);
+  }
+
+  return where.map((clause) => `(${clause})`).join("\n      and ");
+}
+
 function toPaginatedResult<T>(
   items: T[],
   total: number,
@@ -2328,6 +2562,37 @@ function rowToPluginSearchSummary(row: Record<string, unknown>): PluginSearchSum
   };
 }
 
+function rowToPluginReport(row: Record<string, unknown>): PluginReport {
+  const reportType = String(row.report_type);
+  const status = String(row.status);
+
+  return {
+    id: Number(row.id),
+    pluginSlug: String(row.plugin_slug),
+    pluginName: optionalString(row.plugin_name),
+    pluginVersion: String(row.plugin_version),
+    auditRunId: optionalNumber(row.audit_run_id),
+    reportType:
+      reportType === "incorrect_metadata" ||
+      reportType === "score_looks_wrong" ||
+      reportType === "false_positive_issue" ||
+      reportType === "missing_issue" ||
+      reportType === "plugin_updated"
+        ? reportType
+        : "other",
+    message: String(row.message),
+    contactEmail: optionalString(row.contact_email),
+    status:
+      status === "triaged" || status === "resolved" || status === "spam"
+        ? status
+        : "new",
+    adminNotes: optionalString(row.admin_notes),
+    userAgent: optionalString(row.user_agent),
+    createdAt: optionalIsoDate(row.created_at) ?? new Date().toISOString(),
+    updatedAt: optionalIsoDate(row.updated_at) ?? new Date().toISOString(),
+  };
+}
+
 function rowToScoreBreakdown(row: Record<string, unknown>) {
   return {
     security: Number(row.security_score ?? 0),
@@ -2491,6 +2756,15 @@ function parseOptionalDate(value: string | undefined) {
 
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function parseFilterDate(value?: string) {
+  if (!value) {
+    return undefined;
+  }
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
 }
 
 function rowToIssueSummary(row: Record<string, unknown>): IssueSummary {

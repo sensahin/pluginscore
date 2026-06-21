@@ -7,6 +7,12 @@ import type {
   OperationsSummary,
   PaginatedResult,
   PluginDetail,
+  PluginReport,
+  PluginReportInput,
+  PluginReportStats,
+  PluginReportStatus,
+  PluginReportType,
+  PluginReportUpdateInput,
   PluginSearchSummary,
   PluginScoreHistory,
   PluginSummary,
@@ -57,6 +63,17 @@ export type ListRecentSearchesOptions = {
   limit: number;
 };
 
+export type ListPluginReportsOptions = {
+  page: number;
+  perPage: number;
+  status?: PluginReportStatus;
+  reportType?: PluginReportType;
+  pluginSlug?: string;
+  hasContactEmail?: boolean;
+  createdFrom?: string;
+  createdTo?: string;
+};
+
 export type ListAuthorsOptions = {
   limit: number;
 };
@@ -89,6 +106,10 @@ export interface PluginScoreStore {
   getPluginHistory(slug: string, options: GetPluginHistoryOptions): Promise<PluginScoreHistory | null>;
   recordSearch(slug: string): Promise<{ recorded: boolean }>;
   listRecentSearches(options: ListRecentSearchesOptions): Promise<PluginSearchSummary[]>;
+  createPluginReport(input: PluginReportInput): Promise<PluginReport | null>;
+  listPluginReports(options: ListPluginReportsOptions): Promise<PaginatedResult<PluginReport>>;
+  pluginReportStats(): Promise<PluginReportStats>;
+  updatePluginReport(id: number, input: PluginReportUpdateInput): Promise<PluginReport | null>;
   listAuthors(options: ListAuthorsOptions): Promise<AuthorSummary[]>;
   getAuthor(authorName: string): Promise<AuthorDetail | null>;
   listTags(options: ListTagsOptions): Promise<TagSummary[]>;

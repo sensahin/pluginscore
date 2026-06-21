@@ -8,6 +8,8 @@ export type ApiConfig = {
   internalToken?: string;
   searchRateLimitPerMinute: number;
   submissionRateLimitPerMinute: number;
+  reportRateLimitPerMinute: number;
+  reportIpHashSecret?: string;
   bodyLimitBytes: number;
   runningJobTimeoutSeconds: number;
   runningJobMaxAttempts: number;
@@ -25,6 +27,8 @@ export function getConfig(): ApiConfig {
     internalToken: process.env.API_INTERNAL_TOKEN,
     searchRateLimitPerMinute: Number.parseInt(process.env.SEARCH_RATE_LIMIT_PER_MINUTE ?? "60", 10),
     submissionRateLimitPerMinute: Number.parseInt(process.env.SUBMISSION_RATE_LIMIT_PER_MINUTE ?? "6", 10),
+    reportRateLimitPerMinute: Number.parseInt(process.env.REPORT_RATE_LIMIT_PER_MINUTE ?? "4", 10),
+    reportIpHashSecret: process.env.REPORT_IP_HASH_SECRET || process.env.API_INTERNAL_TOKEN,
     bodyLimitBytes: Number.parseInt(process.env.API_BODY_LIMIT_BYTES ?? "52428800", 10),
     runningJobTimeoutSeconds: Number.parseInt(process.env.RUNNING_JOB_TIMEOUT_SECONDS ?? "1800", 10),
     runningJobMaxAttempts: Number.parseInt(process.env.RUNNING_JOB_MAX_ATTEMPTS ?? "3", 10),

@@ -119,6 +119,41 @@ create table if not exists audit_runs (
 alter table if exists audit_runs add column if not exists raw_report_json jsonb;
 alter table if exists audit_runs add column if not exists trigger_reason text not null default 'unknown';
 
+create table if not exists plugin_reports (
+  id bigserial primary key,
+  plugin_id bigint references plugins(id) on delete set null,
+  plugin_slug text not null,
+  plugin_version text not null,
+  audit_run_id bigint references audit_runs(id) on delete set null,
+  report_type text not null check (
+    report_type in (
+      'incorrect_metadata',
+      'score_looks_wrong',
+      'false_positive_issue',
+      'missing_issue',
+      'plugin_updated',
+      'other'
+    )
+  ),
+  message text not null,
+  contact_email text,
+  status text not null default 'new' check (status in ('new', 'triaged', 'resolved', 'spam')),
+  admin_notes text,
+  ip_hash text,
+  user_agent text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists plugin_reports_created_idx
+  on plugin_reports(created_at desc, id desc);
+create index if not exists plugin_reports_status_created_idx
+  on plugin_reports(status, created_at desc, id desc);
+create index if not exists plugin_reports_plugin_created_idx
+  on plugin_reports(plugin_slug, created_at desc, id desc);
+create index if not exists plugin_reports_type_created_idx
+  on plugin_reports(report_type, created_at desc, id desc);
+
 create table if not exists audit_findings (
   id bigserial primary key,
   audit_run_id bigint not null references audit_runs(id) on delete cascade,
