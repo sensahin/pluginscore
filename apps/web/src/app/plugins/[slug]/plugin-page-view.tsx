@@ -32,6 +32,9 @@ import {
 import { formatPluginDirectoryAge } from "@/lib/plugin-age";
 import { scoreDelta } from "@/lib/plugin-score-data";
 
+const pluginPageGridClass =
+  "grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem_20rem]";
+
 export async function PluginPageView({
   plugin,
   history,
@@ -51,13 +54,13 @@ export async function PluginPageView({
       {plugin.audited === false ? <PendingAuditPanel plugin={plugin} /> : null}
 
       <div className="space-y-6">
-        <section className="grid gap-6 lg:grid-cols-[1fr_360px]">
-          <div className="min-w-0 space-y-6">
+        <section className={`${pluginPageGridClass} items-start`}>
+          <div className="min-w-0 space-y-6 lg:col-span-2">
             <IssuesToReview plugin={plugin} />
             <ScoreHistory history={history} plugin={plugin} />
           </div>
 
-          <div className="min-w-0 space-y-6">
+          <div className="min-w-0 space-y-6 lg:col-start-3">
             <PluginMetadata plugin={plugin} supportRate={supportRate} />
             <PluginRankings plugin={plugin} />
             <RelatedPluginTabs tabs={relatedTabs} />
@@ -164,8 +167,8 @@ function PluginSummaryHeader({
 
   return (
     <section className="mb-2 mt-1">
-      <div className="flex flex-col gap-6 lg:flex-row">
-        <div className="flex-1">
+      <div className={`${pluginPageGridClass} items-start`}>
+        <div className="min-w-0">
           <div className="mb-4 flex items-start gap-3">
             <PluginIcon plugin={plugin} size="md" />
             <div className="flex min-w-0 items-start gap-2">
@@ -229,10 +232,8 @@ function PluginSummaryHeader({
           ) : null}
         </div>
 
-        <div className="flex flex-col gap-6 lg:w-fit lg:flex-row">
-          <ScoreCard plugin={plugin} />
-          <ScoreBreakdown plugin={plugin} />
-        </div>
+        <ScoreCard plugin={plugin} />
+        <ScoreBreakdown plugin={plugin} />
       </div>
     </section>
   );
@@ -294,7 +295,7 @@ function ScoreCard({ plugin }: { plugin: PluginDetail }) {
     : scoreTone(plugin.score);
 
   return (
-    <div className="w-full rounded-md border border-line bg-gradient-to-br from-surface to-surface-subtle/60 p-5 shadow-sm lg:w-80">
+    <div className="w-full rounded-md border border-line bg-gradient-to-br from-surface to-surface-subtle/60 p-5 shadow-sm">
       <div className="flex flex-col items-center justify-center">
         <div
           className={`relative flex size-32 items-center justify-center rounded-full border-8 ${tone.border}`}
@@ -349,7 +350,7 @@ function ScoreMetric({
 function ScoreBreakdown({ plugin }: { plugin: PluginDetail }) {
   if (plugin.audited === false) {
     return (
-      <div className="w-full rounded-md border border-line bg-gradient-to-br from-surface to-surface-subtle/60 p-5 shadow-sm lg:w-80">
+      <div className="w-full rounded-md border border-line bg-gradient-to-br from-surface to-surface-subtle/60 p-5 shadow-sm">
         <h2 className="text-base font-semibold">Category Scores</h2>
         <div className="mt-5 rounded-md border border-dashed border-line p-5 text-center text-sm text-muted">
           Pending scan
@@ -366,7 +367,7 @@ function ScoreBreakdown({ plugin }: { plugin: PluginDetail }) {
   ] as const;
 
   return (
-    <div className="w-full rounded-md border border-line bg-gradient-to-br from-surface to-surface-subtle/60 p-5 shadow-sm lg:w-80">
+    <div className="w-full rounded-md border border-line bg-gradient-to-br from-surface to-surface-subtle/60 p-5 shadow-sm">
       <h2 className="text-base font-semibold">Category Scores</h2>
       <div className="mt-5 space-y-4">
         {scores.map(([label, value]) => {
