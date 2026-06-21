@@ -52,7 +52,7 @@ export default async function Home() {
     <AppShell>
       <section className="mx-auto w-full max-w-4xl space-y-5 pt-2 text-center">
         <h1 className="text-4xl font-semibold tracking-normal sm:text-5xl">
-          WordPress Plugin Audit Scores
+          WordPress Plugin Scores
         </h1>
         <PluginSearch
           plugins={searchPlugins.map((plugin) => ({
