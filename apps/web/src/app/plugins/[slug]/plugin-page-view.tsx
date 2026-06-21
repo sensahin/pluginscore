@@ -50,8 +50,6 @@ export async function PluginPageView({
       {plugin.audited === false ? <PendingAuditPanel plugin={plugin} /> : null}
 
       <div className="space-y-6">
-        <AuditOverview plugin={plugin} history={history} />
-
         <section className="grid gap-6 lg:grid-cols-[1fr_360px]">
           <div className="min-w-0 space-y-6">
             <IssuesToReview plugin={plugin} />
@@ -61,13 +59,13 @@ export async function PluginPageView({
 
           <div className="min-w-0 space-y-6">
             <PluginMetadata plugin={plugin} supportRate={supportRate} />
+            <PluginRankings plugin={plugin} />
             <PluginReportCard
               pluginSlug={plugin.slug}
               pluginName={plugin.name}
               pluginVersion={plugin.version}
               auditRunId={plugin.latestAudit?.id}
             />
-            <PluginRankings plugin={plugin} />
           </div>
         </section>
       </div>
@@ -385,97 +383,6 @@ function ScoreBreakdown({ plugin }: { plugin: PluginDetail }) {
           );
         })}
       </div>
-    </div>
-  );
-}
-
-function AuditOverview({
-  plugin,
-  history,
-}: {
-  plugin: PluginDetail;
-  history: PluginScoreHistoryPoint[];
-}) {
-  const groups = groupFindingCodeCounts(plugin.topFindings ?? []);
-  const primaryGroup = groups[0];
-  const topFinding = plugin.topFindings?.[0];
-  const latestPoint = history[history.length - 1];
-  const latestScanDate = latestPoint?.scannedAt ?? plugin.latestAudit?.completedAt ?? plugin.scannedAt;
-  const auditVersion = latestPoint?.pluginCheckVersion ?? plugin.latestAudit?.pluginCheckVersion;
-  const modelVersion = latestPoint?.scoringModelVersion ?? plugin.latestAudit?.scoringModelVersion;
-  const isPending = plugin.audited === false;
-
-  return (
-    <section className="rounded-md border border-line bg-surface shadow-sm">
-      <div className="border-b border-line p-5">
-        <h2 className="text-base font-semibold">Audit Overview</h2>
-      </div>
-      <div className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-4">
-        <OverviewStat
-          label="Open findings"
-          value={isPending ? "Pending" : plugin.findings.toLocaleString()}
-          detail={
-            isPending
-              ? "Queued for Plugin Check"
-              : `${plugin.errors.toLocaleString()} errors, ${plugin.warnings.toLocaleString()} warnings`
-          }
-        />
-        <OverviewStat
-          label="Main area"
-          value={isPending ? "Pending" : primaryGroup ? formatIssueFamily(primaryGroup.family) : "Clean"}
-          detail={
-            primaryGroup
-              ? `${primaryGroup.total.toLocaleString()} grouped findings`
-              : isPending
-                ? "No scan result yet"
-                : "No grouped issues"
-          }
-        />
-        <OverviewStat
-          label="Last scanned"
-          value={latestScanDate ? <RelativeDate value={latestScanDate} /> : "Not scanned"}
-          detail={plugin.latestAudit?.durationMs ? formatDuration(plugin.latestAudit.durationMs) : undefined}
-        />
-        <OverviewStat
-          label="Audit stack"
-          value={auditVersion ? `Plugin Check ${auditVersion}` : "Pending"}
-          detail={modelVersion ? `Model ${modelVersion}` : undefined}
-        />
-      </div>
-      {isPending ? null : (
-        <div className="border-t border-line px-5 py-4 text-sm leading-6 text-muted">
-          {plugin.findings === 0 ? (
-            <span>No open issue groups were found in the latest stored scan.</span>
-          ) : topFinding && primaryGroup ? (
-            <span>
-              Most repeated findings are in <strong className="font-medium text-foreground">{formatIssueFamily(primaryGroup.family)}</strong>,
-              led by <strong className="font-medium text-foreground">{topFinding.title}</strong>.
-            </span>
-          ) : (
-            <span>The latest scan completed, but no grouped finding summary is available.</span>
-          )}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function OverviewStat({
-  label,
-  value,
-  detail,
-}: {
-  label: string;
-  value: ReactNode;
-  detail?: ReactNode;
-}) {
-  return (
-    <div className="min-w-0 rounded-md border border-line bg-background p-4">
-      <p className="text-xs font-medium uppercase text-muted">{label}</p>
-      <p className="mt-2 min-h-7 break-words text-lg font-semibold">{value}</p>
-      {detail ? (
-        <p className="mt-1 break-words text-xs leading-5 text-muted">{detail}</p>
-      ) : null}
     </div>
   );
 }
@@ -1119,27 +1026,6 @@ function formatIssueFamily(family: string) {
   return family
     .replaceAll("_", " ")
     .replace(/\b\w/g, (character) => character.toUpperCase());
-}
-
-function formatDuration(ms: number) {
-  if (!Number.isFinite(ms) || ms <= 0) {
-    return undefined;
-  }
-
-  const seconds = Math.round(ms / 1000);
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const remainingSeconds = seconds % 60;
-
-  if (hours > 0) {
-    return `${hours}h ${minutes}m runtime`;
-  }
-
-  if (minutes > 0) {
-    return `${minutes}m ${remainingSeconds}s runtime`;
-  }
-
-  return `${remainingSeconds}s runtime`;
 }
 
 function SeverityBadge({ severity }: { severity: "error" | "warning" }) {
