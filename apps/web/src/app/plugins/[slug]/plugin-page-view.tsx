@@ -2,6 +2,7 @@ import type { FindingCodeCount, PluginDetail, PluginScoreHistoryPoint } from "@p
 import Link from "next/link";
 import type { ReactNode } from "react";
 import {
+  AlertTriangle,
   Calendar,
   CheckCircle2,
   ChevronDown,
@@ -49,35 +50,16 @@ export async function PluginPageView({
       {plugin.audited === false ? <PendingAuditPanel plugin={plugin} /> : null}
 
       <div className="space-y-6">
-        <TopIssuesByCategory findings={plugin.topFindings ?? []} />
-        <IssuesDetails plugin={plugin} />
+        <AuditOverview plugin={plugin} history={history} />
 
         <section className="grid gap-6 lg:grid-cols-[1fr_360px]">
-          <div className="space-y-6">
-            <div className="rounded-md border border-line bg-surface p-5 shadow-sm">
-              <h2 className="text-base font-semibold">Latest Snapshot</h2>
-              <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                <SmallStat
-                  label="Findings"
-                  value={plugin.audited === false ? "Pending" : plugin.findings.toLocaleString()}
-                />
-                <SmallStat
-                  label="Errors"
-                  value={plugin.audited === false ? "Pending" : plugin.errors.toLocaleString()}
-                />
-                <SmallStat
-                  label="Warnings"
-                  value={plugin.audited === false ? "Pending" : plugin.warnings.toLocaleString()}
-                />
-              </div>
-            </div>
-
+          <div className="min-w-0 space-y-6">
+            <IssuesToReview plugin={plugin} />
             <ScoreHistory history={history} plugin={plugin} />
             <RelatedPluginTabs tabs={relatedTabs} />
           </div>
 
-          <div className="space-y-6">
-            <PluginRankings plugin={plugin} />
+          <div className="min-w-0 space-y-6">
             <PluginMetadata plugin={plugin} supportRate={supportRate} />
             <PluginReportCard
               pluginSlug={plugin.slug}
@@ -85,6 +67,7 @@ export async function PluginPageView({
               pluginVersion={plugin.version}
               auditRunId={plugin.latestAudit?.id}
             />
+            <PluginRankings plugin={plugin} />
           </div>
         </section>
       </div>
@@ -406,79 +389,107 @@ function ScoreBreakdown({ plugin }: { plugin: PluginDetail }) {
   );
 }
 
-function TopIssuesByCategory({
-  findings,
+function AuditOverview({
+  plugin,
+  history,
 }: {
-  findings: FindingCodeCount[];
+  plugin: PluginDetail;
+  history: PluginScoreHistoryPoint[];
 }) {
-  const groups = groupFindingCodeCounts(findings);
-
-  if (groups.length === 0) {
-    return null;
-  }
+  const groups = groupFindingCodeCounts(plugin.topFindings ?? []);
+  const primaryGroup = groups[0];
+  const topFinding = plugin.topFindings?.[0];
+  const latestPoint = history[history.length - 1];
+  const latestScanDate = latestPoint?.scannedAt ?? plugin.latestAudit?.completedAt ?? plugin.scannedAt;
+  const auditVersion = latestPoint?.pluginCheckVersion ?? plugin.latestAudit?.pluginCheckVersion;
+  const modelVersion = latestPoint?.scoringModelVersion ?? plugin.latestAudit?.scoringModelVersion;
+  const isPending = plugin.audited === false;
 
   return (
-    <section className="min-w-0 overflow-hidden rounded-md border border-line bg-surface shadow-sm">
+    <section className="rounded-md border border-line bg-surface shadow-sm">
       <div className="border-b border-line p-5">
-        <h2 className="text-base font-semibold">Top Issues by Category</h2>
+        <h2 className="text-base font-semibold">Audit Overview</h2>
       </div>
-      <div className="divide-y divide-line">
-        {groups.map((group) => (
-          <details key={group.family} className="group">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 transition hover:bg-surface-subtle focus-visible:bg-surface-subtle focus-visible:outline-none group-open:bg-surface-subtle [&::-webkit-details-marker]:hidden">
-              <span className="font-semibold">{group.family}</span>
-              <span className="inline-flex items-center gap-3">
-                <span className="text-sm font-medium text-muted">
-                  {group.total.toLocaleString()}
-                </span>
-                <ChevronDown
-                  size={17}
-                  className="text-muted transition-transform group-open:rotate-180"
-                  aria-hidden="true"
-                />
-              </span>
-            </summary>
-            <div className="space-y-2 border-t border-line px-5 py-4">
-              {group.findings.map((finding, index) => (
-                <Link
-                  key={`${finding.code}-${finding.severity}`}
-                  href={`/issues/${encodeURIComponent(finding.code)}`}
-                  className="flex items-center gap-3 rounded-md px-3 py-2 transition hover:bg-surface-subtle"
-                >
-                  <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-surface-subtle text-xs font-medium text-muted">
-                    {index + 1}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">
-                      {finding.title}
-                    </span>
-                    <span className="mt-0.5 block truncate font-mono text-xs text-muted">
-                      {finding.code}
-                    </span>
-                  </span>
-                  <SeverityBadge severity={finding.severity} />
-                  <span className="w-12 text-right font-mono text-sm text-muted">
-                    {finding.count.toLocaleString()}
-                  </span>
-                </Link>
-              ))}
-            </div>
-          </details>
-        ))}
+      <div className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-4">
+        <OverviewStat
+          label="Open findings"
+          value={isPending ? "Pending" : plugin.findings.toLocaleString()}
+          detail={
+            isPending
+              ? "Queued for Plugin Check"
+              : `${plugin.errors.toLocaleString()} errors, ${plugin.warnings.toLocaleString()} warnings`
+          }
+        />
+        <OverviewStat
+          label="Main area"
+          value={isPending ? "Pending" : primaryGroup ? formatIssueFamily(primaryGroup.family) : "Clean"}
+          detail={
+            primaryGroup
+              ? `${primaryGroup.total.toLocaleString()} grouped findings`
+              : isPending
+                ? "No scan result yet"
+                : "No grouped issues"
+          }
+        />
+        <OverviewStat
+          label="Last scanned"
+          value={latestScanDate ? <RelativeDate value={latestScanDate} /> : "Not scanned"}
+          detail={plugin.latestAudit?.durationMs ? formatDuration(plugin.latestAudit.durationMs) : undefined}
+        />
+        <OverviewStat
+          label="Audit stack"
+          value={auditVersion ? `Plugin Check ${auditVersion}` : "Pending"}
+          detail={modelVersion ? `Model ${modelVersion}` : undefined}
+        />
       </div>
+      {isPending ? null : (
+        <div className="border-t border-line px-5 py-4 text-sm leading-6 text-muted">
+          {plugin.findings === 0 ? (
+            <span>No open issue groups were found in the latest stored scan.</span>
+          ) : topFinding && primaryGroup ? (
+            <span>
+              Most repeated findings are in <strong className="font-medium text-foreground">{formatIssueFamily(primaryGroup.family)}</strong>,
+              led by <strong className="font-medium text-foreground">{topFinding.title}</strong>.
+            </span>
+          ) : (
+            <span>The latest scan completed, but no grouped finding summary is available.</span>
+          )}
+        </div>
+      )}
     </section>
   );
 }
 
-function IssuesDetails({ plugin }: { plugin: PluginDetail }) {
+function OverviewStat({
+  label,
+  value,
+  detail,
+}: {
+  label: string;
+  value: ReactNode;
+  detail?: ReactNode;
+}) {
+  return (
+    <div className="min-w-0 rounded-md border border-line bg-background p-4">
+      <p className="text-xs font-medium uppercase text-muted">{label}</p>
+      <p className="mt-2 min-h-7 break-words text-lg font-semibold">{value}</p>
+      {detail ? (
+        <p className="mt-1 break-words text-xs leading-5 text-muted">{detail}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function IssuesToReview({ plugin }: { plugin: PluginDetail }) {
   const findings = plugin.topFindings ?? [];
+  const groups = groupFindingCodeCounts(findings);
 
   if (plugin.audited === false) {
     return (
       <section className="rounded-md border border-line bg-surface shadow-sm">
         <div className="flex items-center justify-between gap-4 border-b border-line p-5">
           <div>
-            <h2 className="text-base font-semibold">Issues Details</h2>
+            <h2 className="text-base font-semibold">Issues to Review</h2>
             <p className="mt-1 text-sm text-muted">Pending scan</p>
           </div>
           <Clock3 size={32} className="text-muted" aria-hidden="true" />
@@ -487,91 +498,166 @@ function IssuesDetails({ plugin }: { plugin: PluginDetail }) {
     );
   }
 
-  return (
-    <section id="score-history" className="rounded-md border border-line bg-surface shadow-sm">
-      <div className="flex items-center justify-between gap-4 border-b border-line p-5">
-        <div>
-          <h2 className="text-base font-semibold">Issues Details</h2>
-          <p className="mt-1 text-sm text-muted">
-            {plugin.findings.toLocaleString()} issue
-            {plugin.findings === 1 ? "" : "s"} found in latest scan
-          </p>
-        </div>
-        {plugin.findings === 0 ? (
+  if (findings.length === 0) {
+    return (
+      <section className="rounded-md border border-line bg-surface shadow-sm">
+        <div className="flex items-center justify-between gap-4 border-b border-line p-5">
+          <div>
+            <h2 className="text-base font-semibold">Issues to Review</h2>
+            <p className="mt-1 text-sm text-muted">No issue groups found in the latest scan</p>
+          </div>
           <CheckCircle2 size={32} className="text-good" aria-hidden="true" />
-        ) : null}
-      </div>
-
-      {findings.length === 0 ? (
+        </div>
         <div className="p-5">
           <div className="rounded-md border border-dashed border-line p-8 text-center">
             <CheckCircle2 size={48} className="mx-auto mb-3 text-good" />
-            <p className="text-sm font-medium">No issues found.</p>
+            <p className="text-sm font-medium">No open findings in the stored audit summary.</p>
           </div>
         </div>
-      ) : (
-        <div className="p-5">
-          <div className="space-y-3 sm:hidden">
-            {findings.map((finding) => (
-              <div
-                key={finding.code}
-                className="rounded-md border border-line bg-background p-4"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <SeverityBadge severity={finding.severity} />
-                  <span className="shrink-0 font-mono text-sm text-muted">
-                    {finding.count.toLocaleString()}
-                  </span>
-                </div>
-                <Link
-                  href={`/issues/${encodeURIComponent(finding.code)}`}
-                  className="mt-3 block break-all font-mono text-xs leading-5 text-info hover:underline"
-                >
-                  {finding.code}
-                </Link>
-                <p className="mt-3 break-words text-sm leading-6 text-muted">
-                  {finding.sampleMessage}
-                </p>
-              </div>
+      </section>
+    );
+  }
+
+  const visibleFindings = findings.slice(0, 10);
+  const remainingFindings = findings.slice(10);
+  const topGroups = groups.slice(0, 4);
+
+  return (
+    <section className="min-w-0 overflow-hidden rounded-md border border-line bg-surface shadow-sm">
+      <div className="flex flex-col gap-4 border-b border-line p-5 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-base font-semibold">Issues to Review</h2>
+          <p className="mt-1 text-sm text-muted">
+            Prioritized issue groups from the latest Plugin Check scan
+          </p>
+        </div>
+        <span className="inline-flex w-fit items-center gap-2 rounded-md border border-line px-3 py-2 text-sm text-muted">
+          <AlertTriangle size={16} aria-hidden="true" />
+          {plugin.findings.toLocaleString()} findings
+        </span>
+      </div>
+
+      {topGroups.length ? (
+        <div className="grid gap-3 border-b border-line p-5 sm:grid-cols-2 xl:grid-cols-4">
+          {topGroups.map((group) => (
+            <div key={group.family} className="min-w-0 rounded-md border border-line bg-background p-4">
+              <p className="truncate text-sm font-semibold">{formatIssueFamily(group.family)}</p>
+              <p className="mt-2 font-mono text-2xl font-semibold">{group.total.toLocaleString()}</p>
+              <p className="mt-1 text-xs text-muted">
+                {group.findings.length.toLocaleString()} issue group
+                {group.findings.length === 1 ? "" : "s"}
+              </p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="divide-y divide-line">
+        {visibleFindings.map((finding) => (
+          <IssueReviewRow key={`${finding.code}-${finding.severity}`} finding={finding} />
+        ))}
+      </div>
+
+      {remainingFindings.length ? (
+        <details className="group border-t border-line">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 text-sm transition hover:bg-surface-subtle focus-visible:bg-surface-subtle focus-visible:outline-none [&::-webkit-details-marker]:hidden">
+            <span className="font-medium">
+              Show {remainingFindings.length.toLocaleString()} more issue group
+              {remainingFindings.length === 1 ? "" : "s"}
+            </span>
+            <ChevronDown
+              size={17}
+              className="text-muted transition-transform group-open:rotate-180"
+              aria-hidden="true"
+            />
+          </summary>
+          <div className="divide-y divide-line border-t border-line">
+            {remainingFindings.map((finding) => (
+              <IssueReviewRow key={`${finding.code}-${finding.severity}`} finding={finding} compact />
             ))}
           </div>
-
-          <table className="hidden w-full table-fixed border-collapse overflow-hidden rounded-md border border-line text-sm sm:table">
-            <thead>
-              <tr className="border-b border-line text-left text-xs text-muted">
-                <th className="w-[38%] px-3 py-3 font-medium sm:px-4">Code</th>
-                <th className="w-24 px-3 py-3 font-medium sm:px-4">Type</th>
-                <th className="px-3 py-3 font-medium sm:px-4">Message</th>
-                <th className="w-16 px-3 py-3 text-right font-medium sm:px-4">Count</th>
-              </tr>
-            </thead>
-            <tbody>
-              {findings.map((finding) => (
-                <tr key={finding.code} className="border-b border-line last:border-b-0">
-                  <td className="px-3 py-4 sm:px-4">
-                    <Link
-                      href={`/issues/${encodeURIComponent(finding.code)}`}
-                      className="break-all font-mono text-[11px] leading-5 text-info hover:underline sm:text-xs"
-                    >
-                      {finding.code}
-                    </Link>
-                  </td>
-                  <td className="px-3 py-4 sm:px-4">
-                    <SeverityBadge severity={finding.severity} />
-                  </td>
-                  <td className="break-words px-3 py-4 text-muted sm:px-4">
-                    {finding.sampleMessage}
-                  </td>
-                  <td className="px-3 py-4 text-right font-mono sm:px-4">
-                    {finding.count.toLocaleString()}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+        </details>
+      ) : null}
     </section>
+  );
+}
+
+function IssueReviewRow({
+  finding,
+  compact = false,
+}: {
+  finding: FindingCodeCount;
+  compact?: boolean;
+}) {
+  return (
+    <details className="group">
+      <summary className="flex cursor-pointer list-none items-start justify-between gap-4 px-5 py-4 transition hover:bg-surface-subtle focus-visible:bg-surface-subtle focus-visible:outline-none group-open:bg-surface-subtle [&::-webkit-details-marker]:hidden">
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-2">
+            <SeverityBadge severity={finding.severity} />
+            <span className="text-xs font-medium uppercase text-muted">{formatIssueFamily(finding.family)}</span>
+          </span>
+          <span className="mt-2 block break-words text-sm font-semibold">
+            {finding.title}
+          </span>
+          {compact ? null : (
+            <span className="mt-1 block break-words text-sm leading-6 text-muted">
+              {finding.sampleMessage}
+            </span>
+          )}
+        </span>
+        <span className="flex shrink-0 items-center gap-3">
+          <span className="text-right font-mono text-sm text-muted">
+            {finding.count.toLocaleString()}
+          </span>
+          <ChevronDown
+            size={17}
+            className="text-muted transition-transform group-open:rotate-180"
+            aria-hidden="true"
+          />
+        </span>
+      </summary>
+      <div className="border-t border-line bg-background px-5 py-4">
+        <dl className="grid gap-4 text-sm sm:grid-cols-3">
+          <IssueMeta label="Category" value={formatIssueFamily(finding.family)} />
+          <IssueMeta label="Occurrences" value={finding.count.toLocaleString()} />
+          <IssueMeta label="Severity" value={finding.severity} />
+        </dl>
+        <div className="mt-4 rounded-md border border-line bg-surface p-4">
+          <p className="text-xs font-medium uppercase text-muted">Sample message</p>
+          <p className="mt-2 break-words text-sm leading-6 text-muted">
+            {finding.sampleMessage}
+          </p>
+        </div>
+        <div className="mt-4 flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <Link
+            href={`/issues/${encodeURIComponent(finding.code)}`}
+            className="break-all font-mono text-xs text-info hover:underline"
+          >
+            {finding.code}
+          </Link>
+          {finding.docsUrl ? (
+            <a
+              href={finding.docsUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-info hover:underline"
+            >
+              Reference <ExternalLink size={13} aria-hidden="true" />
+            </a>
+          ) : null}
+        </div>
+      </div>
+    </details>
+  );
+}
+
+function IssueMeta({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-xs font-medium uppercase text-muted">{label}</dt>
+      <dd className="mt-1 break-words font-medium text-foreground">{value}</dd>
+    </div>
   );
 }
 
@@ -587,7 +673,7 @@ function ScoreHistory({
   const delta = latest && first ? latest.score - first.score : 0;
 
   return (
-    <section className="rounded-md border border-line bg-surface shadow-sm">
+    <section id="score-history" className="rounded-md border border-line bg-surface shadow-sm">
       <div className="flex flex-col gap-3 border-b border-line p-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-base font-semibold">Score History</h2>
@@ -611,25 +697,48 @@ function ScoreHistory({
 
       <div className="space-y-5 p-5">
         {history.length > 1 ? <ScoreTrendChart points={history} /> : null}
-        {history.length === 1 && latest ? (
-          <div className="rounded-md border border-dashed border-line p-5">
-            <p className="text-sm font-medium">
-              First scan completed <RelativeDate value={latest.scannedAt} />
-            </p>
-            <p className="mt-2 break-words text-sm leading-6 text-muted">
-              v{latest.pluginVersion} · Plugin Check {latest.pluginCheckVersion} · Model {latest.scoringModelVersion}
-            </p>
-          </div>
-        ) : null}
+        {latest ? <LatestHistoryRecord point={latest} firstScan={history.length === 1} /> : null}
         {history.length === 0 ? (
           <div className="rounded-md border border-dashed border-line p-5 text-sm text-muted">
             No completed scan history yet.
           </div>
         ) : (
-          <ScoreHistoryTable points={history} />
+          <details className="group rounded-md border border-line bg-background">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 text-sm transition hover:bg-surface-subtle focus-visible:bg-surface-subtle focus-visible:outline-none [&::-webkit-details-marker]:hidden">
+              <span className="font-medium">Scan records</span>
+              <span className="inline-flex items-center gap-3 text-muted">
+                {history.length.toLocaleString()}
+                <ChevronDown
+                  size={17}
+                  className="transition-transform group-open:rotate-180"
+                  aria-hidden="true"
+                />
+              </span>
+            </summary>
+            <div className="border-t border-line p-4">
+              <ScoreHistoryTable points={history} />
+            </div>
+          </details>
         )}
       </div>
     </section>
+  );
+}
+
+function LatestHistoryRecord({
+  point,
+  firstScan,
+}: {
+  point: PluginScoreHistoryPoint;
+  firstScan: boolean;
+}) {
+  return (
+    <div className="grid gap-3 rounded-md border border-line bg-background p-4 sm:grid-cols-4">
+      <HistoryMeta label={firstScan ? "First scan" : "Latest scan"} value={formatExactDate(point.scannedAt)} />
+      <HistoryMeta label="Plugin version" value={`v${point.pluginVersion}`} />
+      <HistoryMeta label="Plugin Check" value={point.pluginCheckVersion} />
+      <HistoryMeta label="Scoring model" value={point.scoringModelVersion} />
+    </div>
   );
 }
 
@@ -812,6 +921,9 @@ function PluginRankings({ plugin }: { plugin: PluginDetail }) {
     return null;
   }
 
+  const visibleTagRankings = rankings.tags.slice(0, 5);
+  const hiddenTagCount = Math.max(0, rankings.tags.length - visibleTagRankings.length);
+
   return (
     <aside className="rounded-md border border-line bg-surface p-5 shadow-sm">
       <h2 className="text-base font-semibold">Rankings</h2>
@@ -832,9 +944,9 @@ function PluginRankings({ plugin }: { plugin: PluginDetail }) {
         />
       </div>
 
-      {rankings?.tags.length ? (
+      {visibleTagRankings.length ? (
         <div className="mt-5 space-y-2">
-          {rankings.tags.map((tag) => (
+          {visibleTagRankings.map((tag) => (
             <div
               key={tag.slug}
               className="flex items-center justify-between gap-3 rounded-md border border-line px-3 py-2 text-sm"
@@ -856,6 +968,12 @@ function PluginRankings({ plugin }: { plugin: PluginDetail }) {
               </span>
             </div>
           ))}
+          {hiddenTagCount ? (
+            <p className="px-1 pt-1 text-xs text-muted">
+              {hiddenTagCount.toLocaleString()} more ranked categor
+              {hiddenTagCount === 1 ? "y" : "ies"} shown through the tag links above.
+            </p>
+          ) : null}
         </div>
       ) : null}
     </aside>
@@ -997,13 +1115,31 @@ function scorePointTitle(point: PluginScoreHistoryPoint) {
   ].join("\n");
 }
 
-function SmallStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md border border-line bg-background p-4">
-      <p className="text-xs font-medium uppercase text-muted">{label}</p>
-      <p className="mt-2 font-mono text-2xl font-semibold">{value}</p>
-    </div>
-  );
+function formatIssueFamily(family: string) {
+  return family
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function formatDuration(ms: number) {
+  if (!Number.isFinite(ms) || ms <= 0) {
+    return undefined;
+  }
+
+  const seconds = Math.round(ms / 1000);
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainingSeconds = seconds % 60;
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m runtime`;
+  }
+
+  if (minutes > 0) {
+    return `${minutes}m ${remainingSeconds}s runtime`;
+  }
+
+  return `${remainingSeconds}s runtime`;
 }
 
 function SeverityBadge({ severity }: { severity: "error" | "warning" }) {
