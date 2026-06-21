@@ -11,6 +11,7 @@ import {
   Timer,
   Wrench,
 } from "lucide-react";
+import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import {
   getAuditFindingsRetention,
@@ -81,6 +82,32 @@ export default async function AdminPage() {
         },
       ]
     : [];
+  const userSubmissionMetrics = operations
+    ? [
+        {
+          label: "Submitted",
+          value: operations.userSubmissions.total.toLocaleString(),
+          detail: operations.userSubmissions.lastSubmittedAt
+            ? `last ${formatDateTime(operations.userSubmissions.lastSubmittedAt)}`
+            : "no submissions yet",
+        },
+        {
+          label: "Completed",
+          value: operations.userSubmissions.completed.toLocaleString(),
+          detail: "user-triggered scans",
+        },
+        {
+          label: "Active",
+          value: (operations.userSubmissions.queued + operations.userSubmissions.running).toLocaleString(),
+          detail: `${operations.userSubmissions.queued.toLocaleString()} queued, ${operations.userSubmissions.running.toLocaleString()} running`,
+        },
+        {
+          label: "Failed",
+          value: operations.userSubmissions.failed.toLocaleString(),
+          detail: `${operations.userSubmissions.cancelled.toLocaleString()} cancelled`,
+        },
+      ]
+    : [];
 
   return (
     <AppShell>
@@ -148,6 +175,75 @@ export default async function AdminPage() {
               <MetricCard key={metric.label} {...metric} />
             ))}
           </div>
+        </section>
+      ) : null}
+
+      {operations ? (
+        <section className="rounded-md border border-line bg-surface">
+          <div className="flex items-center justify-between border-b border-line p-5">
+            <div>
+              <p className="text-sm font-medium text-brand">Submissions</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-normal">
+                User Submissions
+              </h2>
+            </div>
+            <Clock3 size={18} className="text-muted" aria-hidden="true" />
+          </div>
+          <div className="grid gap-3 border-b border-line p-5 sm:grid-cols-2 xl:grid-cols-4">
+            {userSubmissionMetrics.map((metric) => (
+              <MetricCard key={metric.label} {...metric} />
+            ))}
+          </div>
+          {operations.userSubmissions.recent.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[860px] border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-line text-left text-xs uppercase text-muted">
+                    <th className="px-5 py-3 font-semibold">Plugin</th>
+                    <th className="px-5 py-3 font-semibold">Version</th>
+                    <th className="px-5 py-3 font-semibold">Status</th>
+                    <th className="px-5 py-3 text-right font-semibold">Score</th>
+                    <th className="px-5 py-3 text-right font-semibold">Findings</th>
+                    <th className="px-5 py-3 font-semibold">Submitted</th>
+                    <th className="px-5 py-3 text-right font-semibold">Duration</th>
+                    <th className="px-5 py-3 font-semibold">Last Error</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {operations.userSubmissions.recent.map((submission) => (
+                    <tr key={`${submission.plugin}-${submission.submittedAt}`} className="border-b border-line">
+                      <td className="px-5 py-4">
+                        <Link
+                          href={`/plugins/${submission.plugin}`}
+                          className="block truncate font-medium hover:text-brand"
+                        >
+                          {submission.name}
+                        </Link>
+                        <span className="mt-1 block font-mono text-xs text-muted">{submission.plugin}</span>
+                      </td>
+                      <td className="px-5 py-4 font-mono text-xs">{submission.version}</td>
+                      <td className="px-5 py-4">
+                        <span className={`rounded-md px-2 py-1 text-xs font-semibold ${submissionStatusClass(submission.status)}`}>
+                          {submission.status}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 text-right font-mono">{formatOptionalNumber(submission.score)}</td>
+                      <td className="px-5 py-4 text-right font-mono">{formatOptionalNumber(submission.findings)}</td>
+                      <td className="px-5 py-4 text-muted">
+                        <time dateTime={submission.submittedAt}>{formatDateTime(submission.submittedAt)}</time>
+                      </td>
+                      <td className="px-5 py-4 text-right font-mono">{formatDuration(submission.durationMs)}</td>
+                      <td className="max-w-[28ch] truncate px-5 py-4 text-muted">
+                        {submission.lastError ?? ""}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="p-5 text-sm text-muted">No user submissions yet.</p>
+          )}
         </section>
       ) : null}
 
@@ -450,7 +546,43 @@ function formatOptionalNumber(value?: number) {
   return value === undefined ? "n/a" : value.toLocaleString();
 }
 
+function formatDateTime(value?: string) {
+  if (!value) {
+    return "n/a";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "n/a";
+  }
+
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(date);
+}
+
 function formatVersionCounts(versions: Array<{ version: string; count: number }>) {
   const [first] = versions;
   return first ? `${first.version} (${first.count.toLocaleString()})` : "n/a";
+}
+
+function submissionStatusClass(status: string) {
+  if (status === "failed" || status === "cancelled") {
+    return "bg-risk/10 text-risk";
+  }
+
+  if (status === "running") {
+    return "bg-info/10 text-info";
+  }
+
+  if (status === "complete") {
+    return "bg-good/10 text-good";
+  }
+
+  return "bg-surface-subtle text-muted";
 }

@@ -14,6 +14,7 @@ import type {
   OperationsRecentScan,
   OperationsRunningJob,
   OperationsSummary,
+  OperationsUserSubmission,
   OperationsVersionCount,
   PluginSearchSummary,
   PluginSummary,
@@ -138,6 +139,8 @@ export class PostgresStore implements PluginScoreStore {
       failureResult,
       recentFailureResult,
       recentCompletedResult,
+      userSubmissionStatsResult,
+      userSubmissionRecentResult,
     ] = await Promise.all([
       this.pool.query(`
         select
@@ -316,12 +319,59 @@ export class PostgresStore implements PluginScoreStore {
         order by ar.completed_at desc nulls last, ar.id desc
         limit 8
       `),
+      this.pool.query(`
+        select
+          count(*)::integer as total,
+          count(*) filter (where status = 'queued')::integer as queued,
+          count(*) filter (where status = 'running')::integer as running,
+          count(*) filter (where status = 'complete')::integer as completed,
+          count(*) filter (where status = 'failed')::integer as failed,
+          count(*) filter (where status = 'cancelled')::integer as cancelled,
+          max(created_at) as last_submitted_at
+        from scan_jobs
+        where reason = 'user submission'
+      `),
+      this.pool.query(`
+        select
+          p.slug as plugin,
+          p.name,
+          sj.target_version as version,
+          sj.status,
+          sj.created_at as submitted_at,
+          sj.updated_at,
+          left(coalesce(sj.last_error, ''), 240) as last_error,
+          audit.completed_at,
+          audit.duration_ms,
+          audit.score,
+          audit.total_findings
+        from scan_jobs sj
+        join plugins p on p.id = sj.plugin_id
+        left join lateral (
+          select
+            ar.completed_at,
+            ar.duration_ms,
+            ss.score,
+            ss.total_findings
+          from audit_runs ar
+          left join score_snapshots ss on ss.audit_run_id = ar.id
+          where ar.plugin_id = sj.plugin_id
+            and ar.plugin_version = sj.target_version
+            and ar.completed_at >= sj.created_at - interval '5 minutes'
+            and ar.completed_at <= sj.updated_at + interval '5 minutes'
+          order by ar.completed_at desc nulls last, ar.id desc
+          limit 1
+        ) audit on true
+        where sj.reason = 'user submission'
+        order by sj.created_at desc, sj.id desc
+        limit 12
+      `),
     ]);
 
     const coverageRow = coverageResult.rows[0] ?? {};
     const queueRow = queueResult.rows[0] ?? {};
     const storageRow = storageResult.rows[0] ?? {};
     const distributionRow = distributionResult.rows[0] ?? {};
+    const userSubmissionStatsRow = userSubmissionStatsResult.rows[0] ?? {};
     const indexedPlugins = Number(coverageRow.indexed_plugins ?? 0);
     const auditedPlugins = Number(coverageRow.audited_plugins ?? 0);
     const queuedJobs = Number(coverageRow.queued_jobs ?? 0);
@@ -392,6 +442,16 @@ export class PostgresStore implements PluginScoreStore {
         timeoutAuditRuns: Number(failureResult.rows[0]?.timeout_audit_runs ?? 0),
         repeatedTimeoutPlugins: Number(failureResult.rows[0]?.repeated_timeout_plugins ?? 0),
         recent: recentFailureResult.rows.map(rowToOperationsRecentFailure),
+      },
+      userSubmissions: {
+        total: Number(userSubmissionStatsRow.total ?? 0),
+        queued: Number(userSubmissionStatsRow.queued ?? 0),
+        running: Number(userSubmissionStatsRow.running ?? 0),
+        completed: Number(userSubmissionStatsRow.completed ?? 0),
+        failed: Number(userSubmissionStatsRow.failed ?? 0),
+        cancelled: Number(userSubmissionStatsRow.cancelled ?? 0),
+        lastSubmittedAt: optionalIsoDate(userSubmissionStatsRow.last_submitted_at),
+        recent: userSubmissionRecentResult.rows.map(rowToOperationsUserSubmission),
       },
       recentCompleted: recentCompletedResult.rows.map(rowToOperationsRecentScan),
     };
@@ -1248,12 +1308,13 @@ export class PostgresStore implements PluginScoreStore {
           plugin_id, plugin_version, plugin_check_version,
           scoring_model_version, source_download_url, source_sha256,
           status, exit_code, timed_out, duration_ms, stderr,
-          raw_report_object_key, raw_report_json, started_at, completed_at
+          trigger_reason, raw_report_object_key, raw_report_json,
+          started_at, completed_at
         )
         values (
           $1, $2, $3, $4, $5, $6,
           'complete', $7, false, $8, $9,
-          $10, $11::jsonb, now(), now()
+          $10, $11, $12::jsonb, now(), now()
         )
         returning id
         `,
@@ -1267,6 +1328,7 @@ export class PostgresStore implements PluginScoreStore {
           payload.exitCode,
           payload.durationMs,
           payload.stderr ?? null,
+          job.reason,
           payload.rawReportObjectKey ?? null,
           payload.rawReport === undefined ? null : JSON.stringify(payload.rawReport),
         ],
@@ -1356,12 +1418,12 @@ export class PostgresStore implements PluginScoreStore {
         insert into audit_runs (
           plugin_id, plugin_version, plugin_check_version,
           scoring_model_version, source_download_url, status,
-          timed_out, duration_ms, stderr, completed_at
+          timed_out, duration_ms, stderr, trigger_reason, completed_at
         )
         select
           p.id, sj.target_version, $2, $3, p.download_url,
           case when $4 then 'timeout' else 'failed' end,
-          $4, $5, $6, now()
+          $4, $5, $6, sj.reason, now()
         from scan_jobs sj
         join plugins p on p.id = sj.plugin_id
         where sj.id = $1
@@ -1570,8 +1632,8 @@ async function withTransaction<T>(pool: Pool, callback: (client: PoolClient) => 
 }
 
 async function getJobForUpdate(client: PoolClient, id: number) {
-  const result = await client.query<{ id: number; plugin_id: number; status: string }>(
-    "select id, plugin_id, status from scan_jobs where id = $1 for update",
+  const result = await client.query<{ id: number; plugin_id: number; status: string; reason: string }>(
+    "select id, plugin_id, status, reason from scan_jobs where id = $1 for update",
     [id],
   );
   const job = result.rows[0];
@@ -2105,6 +2167,31 @@ function rowToOperationsRecentFailure(row: Record<string, unknown>): OperationsR
     updatedAt: optionalIsoDate(row.updated_at),
     completedAt: optionalIsoDate(row.completed_at),
     durationMs: optionalRoundedNumber(row.duration_ms),
+  };
+}
+
+function rowToOperationsUserSubmission(row: Record<string, unknown>): OperationsUserSubmission {
+  const rawStatus = String(row.status);
+  const status: OperationsUserSubmission["status"] =
+    rawStatus === "running" ||
+    rawStatus === "complete" ||
+    rawStatus === "failed" ||
+    rawStatus === "cancelled"
+      ? rawStatus
+      : "queued";
+
+  return {
+    plugin: String(row.plugin),
+    name: String(row.name),
+    version: String(row.version),
+    status,
+    submittedAt: optionalIsoDate(row.submitted_at) ?? new Date().toISOString(),
+    updatedAt: optionalIsoDate(row.updated_at) ?? new Date().toISOString(),
+    completedAt: optionalIsoDate(row.completed_at),
+    durationMs: optionalRoundedNumber(row.duration_ms),
+    score: optionalRoundedNumber(row.score),
+    findings: optionalRoundedNumber(row.total_findings),
+    lastError: optionalString(row.last_error),
   };
 }
 

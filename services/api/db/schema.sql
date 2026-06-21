@@ -97,6 +97,7 @@ create table if not exists audit_runs (
   timed_out boolean not null default false,
   duration_ms integer,
   stderr text,
+  trigger_reason text not null default 'unknown',
   raw_report_object_key text,
   raw_report_json jsonb,
   created_at timestamptz not null default now(),
@@ -105,6 +106,7 @@ create table if not exists audit_runs (
 );
 
 alter table if exists audit_runs add column if not exists raw_report_json jsonb;
+alter table if exists audit_runs add column if not exists trigger_reason text not null default 'unknown';
 
 create table if not exists audit_findings (
   id bigserial primary key,

@@ -155,6 +155,15 @@ export class MemoryStore implements PluginScoreStore {
         repeatedTimeoutPlugins: 0,
         recent: [],
       },
+      userSubmissions: {
+        total: 0,
+        queued: 0,
+        running: 0,
+        completed: 0,
+        failed: 0,
+        cancelled: 0,
+        recent: [],
+      },
       recentCompleted: [],
     };
   }

@@ -217,6 +217,20 @@ export type OperationsRecentFailure = {
   durationMs?: number;
 };
 
+export type OperationsUserSubmission = {
+  plugin: string;
+  name: string;
+  version: string;
+  status: "queued" | "running" | "complete" | "failed" | "cancelled";
+  submittedAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  durationMs?: number;
+  score?: number;
+  findings?: number;
+  lastError?: string;
+};
+
 export type OperationsSummary = {
   generatedAt: string;
   coverage: {
@@ -276,6 +290,16 @@ export type OperationsSummary = {
     timeoutAuditRuns: number;
     repeatedTimeoutPlugins: number;
     recent: OperationsRecentFailure[];
+  };
+  userSubmissions: {
+    total: number;
+    queued: number;
+    running: number;
+    completed: number;
+    failed: number;
+    cancelled: number;
+    lastSubmittedAt?: string;
+    recent: OperationsUserSubmission[];
   };
   recentCompleted: OperationsRecentScan[];
 };

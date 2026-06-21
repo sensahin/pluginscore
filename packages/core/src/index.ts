@@ -13,6 +13,7 @@ export type {
   OperationsRecentScan,
   OperationsRunningJob,
   OperationsSummary,
+  OperationsUserSubmission,
   OperationsVersionCount,
   PaginatedResult,
   PluginDetail,
