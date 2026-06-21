@@ -468,10 +468,10 @@ function IssuesToReview({ plugin }: { plugin: PluginDetail }) {
       {remainingFindings.length ? (
         <details className="group border-t border-line">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 text-sm transition hover:bg-surface-subtle focus-visible:bg-surface-subtle focus-visible:outline-none [&::-webkit-details-marker]:hidden">
-            <span className="font-medium">
-              Show {remainingFindings.length.toLocaleString()} more issue group
-              {remainingFindings.length === 1 ? "" : "s"}
+            <span className="font-medium group-open:hidden">
+              Show {remainingFindings.length.toLocaleString()} more
             </span>
+            <span className="hidden font-medium group-open:inline">Show less</span>
             <ChevronDown
               size={17}
               className="text-muted transition-transform group-open:rotate-180"
