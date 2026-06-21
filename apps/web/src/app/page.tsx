@@ -2,6 +2,7 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   CalendarClock,
+  Tag,
 } from "lucide-react";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
@@ -10,15 +11,19 @@ import { PluginIcon } from "@/components/plugin-icon";
 import { PluginSearch } from "@/components/plugin-search";
 import { PluginTabbedList } from "@/components/plugin-tabbed-list";
 import { TagChips } from "@/components/tag-chips";
-import { getPlugins } from "@/lib/api";
-import { scoreDelta, type PluginSummary } from "@/lib/plugin-score-data";
+import { getPlugins, getTags } from "@/lib/api";
+import {
+  scoreDelta,
+  type PluginSummary,
+  type TagSummary,
+} from "@/lib/plugin-score-data";
 import { LOCAL_PLUGIN_SUGGESTION_LIMIT } from "@/lib/plugin-suggestions";
 import { seoMetadata } from "@/lib/seo";
 
 export const metadata = seoMetadata({
   title: "WordPress Plugin Scores | PluginScore",
   description:
-    "Search WordPress plugin scores, Plugin Check findings, issue counts, rankings, tags, authors, installs, and repository metadata.",
+    "Search WordPress plugin scores, Plugin Check findings, issue counts, rankings, categories, authors, installs, and repository metadata.",
   path: "/",
   absoluteTitle: true,
 });
@@ -33,6 +38,7 @@ export default async function Home() {
     recentlyScanned,
     mostIssues,
     needsReview,
+    popularCategories,
   ] = await Promise.all([
     getPlugins({ limit: LOCAL_PLUGIN_SUGGESTION_LIMIT, sort: "installs_desc" }),
     getPlugins({ limit: 12, sort: "score_desc", audited: true }),
@@ -40,6 +46,7 @@ export default async function Home() {
     getPlugins({ limit: 12, sort: "scanned_desc", audited: true }),
     getPlugins({ limit: 12, sort: "issues_desc", audited: true }),
     getPlugins({ limit: 5, sort: "score_asc", audited: true }),
+    getTags(12, 3),
   ]);
 
   return (
@@ -60,6 +67,23 @@ export default async function Home() {
             score: plugin.score,
           }))}
         />
+      </section>
+
+      <section className="space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-xl font-semibold">Popular Categories</h2>
+          <Link
+            href="/tags"
+            className="text-sm font-medium text-brand hover:text-brand-strong"
+          >
+            View all
+          </Link>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {popularCategories.slice(0, 8).map((category) => (
+            <CategoryCard key={category.slug} category={category} />
+          ))}
+        </div>
       </section>
 
       <section className="space-y-4">
@@ -106,6 +130,36 @@ export default async function Home() {
   );
 }
 
+function CategoryCard({ category }: { category: TagSummary }) {
+  return (
+    <Link
+      href={`/tags/${encodeURIComponent(category.slug)}`}
+      className="group flex min-w-0 items-center justify-between gap-3 rounded-md border border-line bg-surface p-4 transition hover:border-brand/40 hover:bg-surface-subtle"
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-md border border-line bg-surface-subtle text-muted group-hover:text-foreground">
+          <Tag size={18} aria-hidden="true" />
+        </span>
+        <div className="min-w-0">
+          <h3 className="truncate text-sm font-semibold text-info group-hover:underline">
+            {category.name}
+          </h3>
+          <p className="mt-1 truncate text-xs text-muted">
+            {category.auditedPluginCount.toLocaleString()} audited -{" "}
+            {formatCompact(category.activeInstalls)} installs
+          </p>
+        </div>
+      </div>
+      {category.averageScore !== undefined ? (
+        <span className="inline-flex shrink-0 items-baseline gap-1 text-xs font-semibold text-foreground">
+          <span className="font-mono text-sm">{category.averageScore}</span>
+          avg
+        </span>
+      ) : null}
+    </Link>
+  );
+}
+
 function PluginCard({ plugin }: { plugin: PluginSummary }) {
   const delta = scoreDelta(plugin);
   const DeltaIcon = delta >= 0 ? ArrowUpRight : ArrowDownRight;
@@ -145,6 +199,13 @@ function PluginCard({ plugin }: { plugin: PluginSummary }) {
       </div>
     </article>
   );
+}
+
+function formatCompact(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "0";
+  if (value >= 1_000_000) return `${Math.round(value / 1_000_000)}m+`;
+  if (value >= 1_000) return `${Math.round(value / 1_000)}k+`;
+  return String(value);
 }
 
 const scoreCircleClassName: Record<PluginSummary["band"], string> = {

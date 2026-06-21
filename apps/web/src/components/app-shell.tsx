@@ -1,10 +1,11 @@
-import { BarChart3, GitCompareArrows } from "lucide-react";
+import { BarChart3, GitCompareArrows, Tag } from "lucide-react";
 import Link from "next/link";
 import { BrandMark } from "@/components/brand-mark";
 import { getStats } from "@/lib/api";
 
 const navItems = [
   { href: "/rankings", label: "Rankings", icon: BarChart3 },
+  { href: "/tags", label: "Categories", icon: Tag },
   { href: "/compare", label: "Compare", icon: GitCompareArrows },
 ];
 
@@ -54,7 +55,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
               About
             </Link>
             <Link href="/tags" className="hover:text-foreground">
-              Tags
+              Categories
             </Link>
             <Link href="/issues" className="hover:text-foreground">
               Issues

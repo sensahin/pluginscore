@@ -151,7 +151,7 @@ async function getRelatedPluginTabs(plugin: PluginDetail): Promise<RelatedPlugin
     : [];
 
   return [
-    { id: "best-tags", label: "Best in same tags", plugins: bestInTags },
+    { id: "best-tags", label: "Best in same categories", plugins: bestInTags },
     { id: "installed-tags", label: "Most installed", plugins: mostInstalledInTags },
     { id: "same-author", label: "Same author", plugins: sameAuthor },
   ];

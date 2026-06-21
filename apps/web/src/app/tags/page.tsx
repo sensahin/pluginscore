@@ -5,9 +5,9 @@ import { getTags } from "@/lib/api";
 import { seoMetadata } from "@/lib/seo";
 
 export const metadata = seoMetadata({
-  title: "WordPress Plugin Tags",
+  title: "WordPress Plugin Categories",
   description:
-    "Browse WordPress plugin tags with indexed plugin counts, audited plugin counts, installs, downloads, and average PluginScore results.",
+    "Browse WordPress plugin categories with indexed plugin counts, audited plugin counts, installs, and average PluginScore results.",
   path: "/tags",
 });
 
@@ -20,7 +20,7 @@ export default async function TagsPage() {
     <AppShell>
       <section className="rounded-md border border-line bg-surface p-5">
         <h1 className="text-3xl font-semibold tracking-normal">
-          WordPress Plugin Tags
+          WordPress Plugin Categories
         </h1>
       </section>
 
@@ -44,19 +44,20 @@ export default async function TagsPage() {
                   </p>
                 </div>
               </div>
-              <div className="flex flex-wrap items-center gap-3 text-xs text-muted md:justify-end">
-                <span className="inline-flex items-center gap-1">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted md:justify-end">
+                <span className="inline-flex items-center gap-1 rounded-md border border-line bg-surface-subtle px-2 py-1">
                   <Download size={14} aria-hidden="true" />
                   {formatCompact(tag.activeInstalls)} installs
                 </span>
-                <span className="inline-flex items-center gap-1">
+                <span className="inline-flex items-center gap-1 rounded-md border border-line bg-surface-subtle px-2 py-1">
                   <Package size={14} aria-hidden="true" />
                   {tag.auditedPluginCount.toLocaleString()} audited
                 </span>
                 {tag.averageScore !== undefined ? (
-                  <span className="inline-flex items-center gap-1 font-mono text-foreground">
+                  <span className="inline-flex items-center gap-1 rounded-md border border-line bg-surface-subtle px-2 py-1 text-foreground">
                     <Gauge size={14} aria-hidden="true" />
-                    {tag.averageScore}
+                    <span className="font-mono">{tag.averageScore}</span>
+                    avg
                   </span>
                 ) : null}
               </div>
