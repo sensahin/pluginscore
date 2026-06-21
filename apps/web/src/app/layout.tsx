@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL("https://pluginscore.com"),
   title: {
-    default: `WordPress Plugin Scores | ${SITE_NAME}`,
+    default: `WordPress Plugin Audit Scores | ${SITE_NAME}`,
     template: `%s | ${SITE_NAME}`,
   },
   description: DEFAULT_SEO_DESCRIPTION,
@@ -33,12 +33,12 @@ export const metadata: Metadata = {
     siteName: SITE_NAME,
     type: "website",
     url: "https://pluginscore.com",
-    title: "WordPress Plugin Scores",
+    title: "WordPress Plugin Audit Scores",
     description: DEFAULT_SEO_DESCRIPTION,
   },
   twitter: {
     card: "summary",
-    title: "WordPress Plugin Scores",
+    title: "WordPress Plugin Audit Scores",
     description: DEFAULT_SEO_DESCRIPTION,
   },
 };

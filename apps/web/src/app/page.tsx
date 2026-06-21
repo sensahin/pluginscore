@@ -20,9 +20,9 @@ import { LOCAL_PLUGIN_SUGGESTION_LIMIT } from "@/lib/plugin-suggestions";
 import { seoMetadata } from "@/lib/seo";
 
 export const metadata = seoMetadata({
-  title: "WordPress Plugin Scores | PluginScore",
+  title: "WordPress Plugin Audit Scores | PluginScore",
   description:
-    "Search WordPress plugin scores, Plugin Check findings, issue counts, rankings, categories, authors, installs, and repository metadata.",
+    "Search WordPress plugin audit scores, Plugin Check findings, issue counts, rankings, categories, authors, installs, and repository metadata.",
   path: "/",
   absoluteTitle: true,
 });
@@ -52,7 +52,7 @@ export default async function Home() {
     <AppShell>
       <section className="mx-auto w-full max-w-4xl space-y-5 pt-2 text-center">
         <h1 className="text-4xl font-semibold tracking-normal sm:text-5xl">
-          WordPress Plugin Scores
+          WordPress Plugin Audit Scores
         </h1>
         <PluginSearch
           plugins={searchPlugins.map((plugin) => ({
