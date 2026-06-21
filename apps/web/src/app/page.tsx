@@ -1,7 +1,6 @@
 import {
   ArrowDownRight,
   ArrowUpRight,
-  CalendarClock,
   Tag,
 } from "lucide-react";
 import Link from "next/link";
@@ -91,9 +90,8 @@ export default async function Home() {
           <h2 className="text-xl font-semibold">Recently Scanned</h2>
           <Link
             href="/rankings/recently-updated"
-            className="inline-flex h-10 items-center gap-2 rounded-md border border-line px-3 text-sm font-semibold transition hover:bg-surface-subtle"
+            className="text-sm font-medium text-brand hover:text-brand-strong"
           >
-            <CalendarClock size={16} aria-hidden="true" />
             View latest
           </Link>
         </div>
