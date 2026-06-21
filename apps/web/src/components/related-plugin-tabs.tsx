@@ -94,7 +94,7 @@ export function RelatedPluginTabs({
         <div
           role="tablist"
           aria-labelledby={headingId}
-          className="flex flex-wrap gap-2"
+          className="grid grid-cols-3 gap-1 rounded-md border border-line bg-background p-1"
         >
           {availableTabs.map((tab, index) => {
             const isSelected = tab.id === selectedTab.id;
@@ -110,13 +110,13 @@ export function RelatedPluginTabs({
                 tabIndex={isSelected ? 0 : -1}
                 onClick={() => setSelectedId(tab.id)}
                 onKeyDown={(event) => handleTabKeyDown(event, index)}
-                className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition ${
+                className={`min-w-0 rounded-sm px-2 py-1.5 text-xs font-medium transition ${
                   isSelected
-                    ? "border-brand/40 bg-brand/10 text-foreground"
-                    : "border-line text-muted hover:bg-surface-subtle hover:text-foreground"
+                    ? "bg-brand/10 text-foreground"
+                    : "text-muted hover:bg-surface-subtle hover:text-foreground"
                 }`}
               >
-                {tab.label}
+                <span className="block truncate">{tab.label}</span>
               </button>
             );
           })}
