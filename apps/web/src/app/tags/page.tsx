@@ -7,7 +7,7 @@ import { seoMetadata } from "@/lib/seo";
 export const metadata = seoMetadata({
   title: "WordPress Plugin Categories",
   description:
-    "Browse WordPress plugin categories with indexed plugin counts, audited plugin counts, installs, and average PluginScore results.",
+    "Browse WordPress plugin categories by PluginScore audit scores, Plugin Check findings, issue counts, installs, and repository metadata.",
   path: "/tags",
 });
 

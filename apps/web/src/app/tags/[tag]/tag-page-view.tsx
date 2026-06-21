@@ -101,14 +101,13 @@ export async function generateTagMetadata({
       : "";
   const description =
     detail && detail.pluginCount > 0
-      ? `${detail.pluginCount} ${displayName} WordPress plugins ranked by scores, findings, installs, and repository metadata.${scoreText}`
-      : `Best ${displayName} WordPress plugins ranked by PluginScore audits, issue counts, installs, and repository metadata.`;
-  const titlePrefix =
-    sort === "score_desc" ? "Best" : tagSorts[sort].titleSuffix;
+      ? `Compare ${detail.pluginCount.toLocaleString()} ${displayName} WordPress plugins by audit score, Plugin Check findings, issue counts, installs, ratings, and update activity.${scoreText}`
+      : `Compare ${displayName} WordPress plugins by audit score, Plugin Check findings, issue counts, installs, ratings, and update activity.`;
+  const title = tagSeoTitle(displayName, sort);
 
   return {
     ...seoMetadata({
-      title: titleWithPage(`${titlePrefix} ${displayName} WordPress Plugins`, page),
+      title: titleWithPage(title, page),
       description,
       path: tagSortPath(detail?.slug ?? tag, sort, page),
     }),
@@ -116,6 +115,9 @@ export async function generateTagMetadata({
       displayName,
       "WordPress plugins",
       "PluginScore",
+      "WordPress plugin audit score",
+      "Plugin Check findings",
+      "WordPress plugin security signals",
       "WordPress plugin ranking",
       ...pluginNames,
     ],
@@ -145,12 +147,14 @@ export async function TagPageView({
   }
 
   const rankOffset = (plugins.page - 1) * plugins.perPage;
+  const displayName = seoDisplayName(detail.name);
+  const pageTitle = tagPageTitle(displayName, sort);
 
   const structuredData = {
     "@context": "https://schema.org",
     "@type": "CollectionPage",
-    name: `${detail.name} WordPress Plugins`,
-    description: `${detail.pluginCount} WordPress plugin${detail.pluginCount === 1 ? "" : "s"} tagged ${detail.name} on PluginScore.`,
+    name: pageTitle,
+    description: `Compare ${displayName} WordPress plugins by PluginScore audit score, Plugin Check findings, installs, ratings, and repository metadata.`,
     mainEntity: {
       "@type": "ItemList",
       numberOfItems: plugins.total,
@@ -191,7 +195,7 @@ export async function TagPageView({
           </span>
           <div className="min-w-0">
             <h1 className="text-3xl font-semibold tracking-normal md:text-4xl">
-              {detail.name}
+              {pageTitle}
             </h1>
             <p className="mt-2 text-sm text-muted">
               {detail.pluginCount.toLocaleString()} indexed plugin
@@ -285,6 +289,26 @@ function titleFromTagSlug(slug: string) {
     .filter(Boolean)
     .map((part) => part[0]?.toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function tagSeoTitle(displayName: string, sort: TagSort) {
+  if (sort === "score_desc") {
+    return `Best ${displayName} WordPress Plugins by Audit Score`;
+  }
+
+  return tagPageTitle(displayName, sort);
+}
+
+function tagPageTitle(displayName: string, sort: TagSort) {
+  if (sort === "score_desc") {
+    return `Best ${displayName} WordPress Plugins`;
+  }
+
+  if (sort === "issues_desc") {
+    return `${displayName} WordPress Plugins with Most Issues`;
+  }
+
+  return `${tagSorts[sort].titleSuffix} ${displayName} WordPress Plugins`;
 }
 
 function formatCompact(value: number) {

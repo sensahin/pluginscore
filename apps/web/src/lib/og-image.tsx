@@ -341,7 +341,7 @@ export function pluginToOgImage(plugin: PluginSummary) {
 export function defaultOgImage() {
   return createOgImage({
     title: "WordPress Plugin Scores",
-    subtitle: "Search Plugin Check scores, findings, rankings, tags, authors, installs, and repository metadata.",
+    subtitle: "Search Plugin Check audit scores, findings, rankings, categories, authors, installs, and repository metadata.",
     stats: [
       { label: "Rankings", value: "Scores" },
       { label: "Signals", value: "Findings" },

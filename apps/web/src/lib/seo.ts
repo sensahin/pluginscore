@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 export const SITE_NAME = "PluginScore";
 export const DEFAULT_SEO_DESCRIPTION =
-  "Search WordPress plugin scores, Plugin Check findings, rankings, tags, authors, installs, and repository metadata.";
+  "Search WordPress plugin audit scores, Plugin Check findings, rankings, categories, authors, installs, and repository metadata.";
 
 type SeoMetadataOptions = {
   title: string;
