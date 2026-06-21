@@ -163,23 +163,25 @@ function PluginCard({ plugin }: { plugin: PluginSummary }) {
   const DeltaIcon = delta >= 0 ? ArrowUpRight : ArrowDownRight;
 
   return (
-    <article className="flex min-h-60 min-w-0 max-w-full flex-col overflow-hidden rounded-md border border-line bg-surface p-5 shadow-sm transition hover:border-brand hover:shadow">
+    <article className="group relative flex min-h-60 min-w-0 max-w-full cursor-pointer flex-col overflow-hidden rounded-md border border-line bg-surface p-5 shadow-sm transition hover:border-brand hover:shadow">
+      <Link
+        href={`/plugins/${plugin.slug}`}
+        prefetch={false}
+        className="absolute inset-0 z-10 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+        aria-label={`Open ${plugin.name}`}
+      />
       <div className="flex min-w-0 items-start justify-between gap-4">
         <PluginIcon plugin={plugin} size="xl" />
         <ScoreCircle score={plugin.score} band={plugin.band} />
       </div>
       <div className="mt-5 min-w-0">
-        <Link
-          href={`/plugins/${plugin.slug}`}
-          prefetch={false}
-          className="line-clamp-2 text-lg font-semibold leading-6 text-info hover:underline"
-        >
+        <span className="line-clamp-2 text-lg font-semibold leading-6 text-info group-hover:underline">
           {plugin.name}
-        </Link>
+        </span>
         <p className="mt-2 text-sm text-muted">{plugin.activeInstalls} active installs</p>
       </div>
       <div className="mt-auto pt-4">
-        <div className="min-h-7">
+        <div className="pointer-events-none relative z-20 min-h-7 [&_a]:pointer-events-auto">
           <TagChips tags={plugin.tags} limit={3} size="xs" />
         </div>
         <div className="mt-5 flex items-center justify-between gap-3 border-t border-line pt-4 text-xs text-muted">
