@@ -70,6 +70,7 @@ export const rankingKinds = {
 } as const;
 
 export type RankingKind = keyof typeof rankingKinds;
+const defaultRankingKind: RankingKind = "most-installed";
 
 type RankingPageViewProps = {
   kind?: RankingKind;
@@ -85,15 +86,6 @@ const rankingLinks = [
   { href: "/rankings/most-improved", label: "Most Improved", kind: "most-improved" },
   { href: "/rankings/recently-updated", label: "Recently Scanned", kind: "recently-updated" },
 ] as const;
-
-const rankingIndex = {
-  title: "Plugin Rankings",
-  seoTitle: "WordPress Plugin Rankings",
-  description:
-    "Browse WordPress plugin rankings by score, downloads, recent scans, score movement, and plugins that need review.",
-  sort: "score_desc",
-  audited: true,
-} as const;
 
 export function generateRankingKindStaticParams() {
   return Object.keys(rankingKinds).map((kind) => ({ kind }));
@@ -112,7 +104,7 @@ export function generateRankingMetadata({
   kind,
   page = 1,
 }: RankingPageViewProps): Metadata {
-  const ranking = kind ? rankingKinds[kind] : rankingIndex;
+  const ranking = rankingKinds[kind ?? defaultRankingKind];
 
   return seoMetadata({
     title: titleWithPage(ranking.seoTitle, page),
@@ -122,7 +114,8 @@ export function generateRankingMetadata({
 }
 
 export async function RankingPageView({ kind, page = 1 }: RankingPageViewProps) {
-  const ranking = kind ? rankingKinds[kind] : rankingIndex;
+  const activeKind = kind ?? defaultRankingKind;
+  const ranking = rankingKinds[activeKind];
 
   if (!ranking) {
     notFound();
@@ -149,7 +142,7 @@ export async function RankingPageView({ kind, page = 1 }: RankingPageViewProps) 
                 key={link.href}
                 href={link.href}
                 className={`rounded-md border px-3 py-2 text-sm font-medium transition ${
-                  link.kind === kind
+                  link.kind === activeKind
                     ? "border-brand/40 bg-brand/10 text-foreground"
                     : "border-line text-muted hover:bg-surface-subtle hover:text-foreground"
                 }`}
