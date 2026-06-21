@@ -175,7 +175,7 @@ function PluginCard({ plugin }: { plugin: PluginSummary }) {
         <ScoreCircle score={plugin.score} band={plugin.band} />
       </div>
       <div className="mt-5 min-w-0">
-        <span className="line-clamp-2 text-lg font-semibold leading-6 text-info group-hover:underline">
+        <span className="line-clamp-2 text-lg font-semibold leading-6 text-info">
           {plugin.name}
         </span>
         <p className="mt-2 text-sm text-muted">{plugin.activeInstalls} active installs</p>
