@@ -450,7 +450,9 @@ function IssuesToReview({ plugin }: { plugin: PluginDetail }) {
       </div>
 
       {topGroups.length ? (
-        <div className="grid gap-3 border-b border-line p-5 sm:grid-cols-2 xl:grid-cols-4">
+        <div
+          className={`grid gap-3 border-b border-line p-5 ${issueGroupGridClass(topGroups.length)}`}
+        >
           {topGroups.map((group) => (
             <div key={group.family} className="min-w-0 rounded-md border border-line bg-background p-4">
               <p className="truncate text-sm font-semibold">{formatIssueFamily(group.family)}</p>
@@ -492,6 +494,22 @@ function IssuesToReview({ plugin }: { plugin: PluginDetail }) {
       ) : null}
     </section>
   );
+}
+
+function issueGroupGridClass(count: number) {
+  if (count <= 1) {
+    return "";
+  }
+
+  if (count === 2) {
+    return "sm:grid-cols-2";
+  }
+
+  if (count === 3) {
+    return "md:grid-cols-3";
+  }
+
+  return "sm:grid-cols-2 xl:grid-cols-4";
 }
 
 function IssueReviewRow({
