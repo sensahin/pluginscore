@@ -54,12 +54,12 @@ export async function PluginPageView({
           <div className="min-w-0 space-y-6">
             <IssuesToReview plugin={plugin} />
             <ScoreHistory history={history} plugin={plugin} />
-            <RelatedPluginTabs tabs={relatedTabs} />
           </div>
 
           <div className="min-w-0 space-y-6">
             <PluginMetadata plugin={plugin} supportRate={supportRate} />
             <PluginRankings plugin={plugin} />
+            <RelatedPluginTabs tabs={relatedTabs} />
             <PluginReportCard
               pluginSlug={plugin.slug}
               pluginName={plugin.name}

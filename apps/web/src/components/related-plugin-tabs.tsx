@@ -5,7 +5,6 @@ import type { KeyboardEvent } from "react";
 import { useId, useMemo, useState } from "react";
 import { PluginIcon } from "@/components/plugin-icon";
 import { ScoreBadge } from "@/components/score-badge";
-import { TagChips } from "@/components/tag-chips";
 import type { PluginSummary } from "@/lib/plugin-score-data";
 
 export type RelatedPluginTab = {
@@ -90,7 +89,7 @@ export function RelatedPluginTabs({
 
   return (
     <section className="rounded-md border border-line bg-surface shadow-sm">
-      <div className="flex flex-col gap-3 border-b border-line p-5 xl:flex-row xl:items-center xl:justify-between">
+      <div className="space-y-3 border-b border-line p-5">
         <h2 id={headingId} className="text-base font-semibold">Related Plugins</h2>
         <div
           role="tablist"
@@ -135,7 +134,7 @@ export function RelatedPluginTabs({
         {selectedTab.plugins.map((plugin) => (
           <div
             key={plugin.slug}
-            className="grid gap-3 p-4 transition hover:bg-surface-subtle sm:grid-cols-[1fr_auto]"
+            className="flex items-start justify-between gap-3 p-4 transition hover:bg-surface-subtle"
           >
             <div className="flex min-w-0 gap-3">
               <PluginIcon plugin={plugin} size="sm" />
@@ -150,12 +149,9 @@ export function RelatedPluginTabs({
                 <p className="mt-1 truncate text-xs text-muted">
                   {plugin.activeInstalls} active installs
                 </p>
-                <div className="mt-2">
-                  <TagChips tags={plugin.tags} limit={3} size="xs" />
-                </div>
               </div>
             </div>
-            <div className="flex items-center sm:justify-end">
+            <div className="shrink-0">
               {plugin.audited === false ? (
                 <span className="inline-flex rounded-md border border-line bg-surface-subtle px-2 py-1 text-xs font-semibold text-muted">
                   Pending
