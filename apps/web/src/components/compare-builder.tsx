@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowRight, Plus, Search, X } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { KeyboardEvent } from "react";
 import { useId, useMemo, useState } from "react";
@@ -251,9 +252,17 @@ export function CompareBuilder({
                       index === safeHighlightedIndex ? "bg-surface-subtle" : "hover:bg-surface-subtle"
                     }`}
                   >
-                    <span className="min-w-0 truncate font-medium">{plugin.name}</span>
-                    <span className="shrink-0 font-mono text-xs text-muted">
-                      {plugin.activeInstalls}
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">{plugin.name}</span>
+                      <span className="mt-0.5 block truncate text-xs text-muted">
+                        {plugin.slug}
+                      </span>
+                    </span>
+                    <span className="flex shrink-0 flex-col items-end gap-0.5 text-xs text-muted">
+                      <span>{plugin.activeInstalls}</span>
+                      {plugin.audited ? (
+                        <span className="font-mono text-foreground">{plugin.score} score</span>
+                      ) : null}
                     </span>
                   </button>
                 ))}
@@ -264,7 +273,16 @@ export function CompareBuilder({
 
         {showEmptyState ? (
           <div className="rounded-md border border-dashed border-line p-4 text-sm text-muted">
-            No indexed plugin matched that search.
+            <p className="font-medium text-foreground">No indexed plugin matched that search.</p>
+            <p className="mt-1">
+              Search the main index, or scan it from WordPress.org if it exists.
+            </p>
+            <Link
+              href={`/search?q=${encodeURIComponent(trimmedQuery)}`}
+              className="mt-3 inline-flex h-9 items-center rounded-md border border-line px-3 text-sm font-semibold text-foreground transition hover:bg-surface-subtle"
+            >
+              Search main index
+            </Link>
           </div>
         ) : null}
 

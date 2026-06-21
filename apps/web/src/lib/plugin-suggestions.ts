@@ -10,6 +10,7 @@ export type PluginSuggestion = Pick<
   | "rating"
   | "ratingCount"
   | "score"
+  | "audited"
 >;
 
 export const LOCAL_PLUGIN_SUGGESTION_LIMIT = 80;

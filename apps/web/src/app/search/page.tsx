@@ -65,6 +65,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
               rating: plugin.rating,
               ratingCount: plugin.ratingCount,
               score: plugin.score,
+              audited: plugin.audited,
             }))}
           />
         </div>

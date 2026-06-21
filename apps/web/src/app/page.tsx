@@ -64,6 +64,7 @@ export default async function Home() {
             rating: plugin.rating,
             ratingCount: plugin.ratingCount,
             score: plugin.score,
+            audited: plugin.audited,
           }))}
         />
       </section>

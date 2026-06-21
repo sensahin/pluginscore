@@ -56,6 +56,7 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
             ratingCount: plugin.ratingCount,
             lastUpdated: plugin.lastUpdated,
             score: plugin.score,
+            audited: plugin.audited,
           }))}
           initialSlugs={requestedSlugs}
         />
