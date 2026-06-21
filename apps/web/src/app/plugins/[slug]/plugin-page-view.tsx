@@ -14,6 +14,7 @@ import {
   User,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { PluginBadgeCard } from "@/components/plugin-badge-card";
 import { PluginIcon } from "@/components/plugin-icon";
 import { PluginReportCard } from "@/components/plugin-report-card";
 import { RelativeDate } from "@/components/relative-date";
@@ -60,6 +61,10 @@ export async function PluginPageView({
             <PluginMetadata plugin={plugin} supportRate={supportRate} />
             <PluginRankings plugin={plugin} />
             <RelatedPluginTabs tabs={relatedTabs} />
+            <PluginBadgeCard
+              pluginSlug={plugin.slug}
+              pluginName={plugin.name}
+            />
             <PluginReportCard
               pluginSlug={plugin.slug}
               pluginName={plugin.name}
