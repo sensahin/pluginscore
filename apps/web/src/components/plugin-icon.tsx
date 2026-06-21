@@ -52,8 +52,14 @@ export function PluginIcon({
 
 function isPassthroughImage(url: string) {
   try {
-    const pathname = new URL(url).pathname.toLowerCase();
-    return pathname.endsWith(".svg") || pathname.endsWith(".gif");
+    const parsedUrl = new URL(url);
+    const pathname = parsedUrl.pathname.toLowerCase();
+
+    return (
+      parsedUrl.hostname === "ps.w.org" ||
+      pathname.endsWith(".svg") ||
+      pathname.endsWith(".gif")
+    );
   } catch {
     return false;
   }
