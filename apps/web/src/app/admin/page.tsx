@@ -279,7 +279,7 @@ export default async function AdminPage() {
       </section>
 
       {operations ? (
-        <section className="grid gap-4 xl:grid-cols-2">
+        <section className="grid gap-4">
           <section className="rounded-md border border-line bg-surface">
             <div className="flex items-center justify-between border-b border-line p-5">
               <h2 className="text-base font-semibold">Recent Completed Scans</h2>
