@@ -918,10 +918,6 @@ function PluginMetadata({
           label="Directory age"
           value={formatPluginDirectoryAge(plugin.addedAt)}
         />
-        <MetaRow
-          label="Added"
-          value={plugin.addedAt ? <RelativeDate value={plugin.addedAt} /> : undefined}
-        />
         <MetaRow label="Requires WP" value={plugin.requiresWp} />
         <MetaRow label="Tested up to" value={plugin.testedWp} />
         <MetaRow label="Requires PHP" value={plugin.requiresPhp} />
