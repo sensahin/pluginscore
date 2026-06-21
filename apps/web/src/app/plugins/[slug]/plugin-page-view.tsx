@@ -604,48 +604,15 @@ function ScoreHistory({
 
       <div className="space-y-5 p-5">
         {history.length > 1 ? <ScoreTrendChart points={history} /> : null}
-        {latest ? <LatestHistoryRecord point={latest} firstScan={history.length === 1} /> : null}
         {history.length === 0 ? (
           <div className="rounded-md border border-dashed border-line p-5 text-sm text-muted">
             No completed scan history yet.
           </div>
         ) : (
-          <details className="group rounded-md border border-line bg-background">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 text-sm transition hover:bg-surface-subtle focus-visible:bg-surface-subtle focus-visible:outline-none [&::-webkit-details-marker]:hidden">
-              <span className="font-medium">Scan records</span>
-              <span className="inline-flex items-center gap-3 text-muted">
-                {history.length.toLocaleString()}
-                <ChevronDown
-                  size={17}
-                  className="transition-transform group-open:rotate-180"
-                  aria-hidden="true"
-                />
-              </span>
-            </summary>
-            <div className="border-t border-line p-4">
-              <ScoreHistoryTable points={history} />
-            </div>
-          </details>
+          <ScoreHistoryTable points={history} />
         )}
       </div>
     </section>
-  );
-}
-
-function LatestHistoryRecord({
-  point,
-  firstScan,
-}: {
-  point: PluginScoreHistoryPoint;
-  firstScan: boolean;
-}) {
-  return (
-    <div className="grid gap-3 rounded-md border border-line bg-background p-4 sm:grid-cols-4">
-      <HistoryMeta label={firstScan ? "First scan" : "Latest scan"} value={formatExactDate(point.scannedAt)} />
-      <HistoryMeta label="Plugin version" value={`v${point.pluginVersion}`} />
-      <HistoryMeta label="Plugin Check" value={point.pluginCheckVersion} />
-      <HistoryMeta label="Scoring model" value={point.scoringModelVersion} />
-    </div>
   );
 }
 
@@ -754,15 +721,14 @@ function ScoreHistoryTable({ points }: { points: PluginScoreHistoryPoint[] }) {
               <HistoryMeta label="Findings" value={point.findings.toLocaleString()} />
               <HistoryMeta label="Errors" value={point.errors.toLocaleString()} />
               <HistoryMeta label="Warnings" value={point.warnings.toLocaleString()} />
-              <HistoryMeta label="Plugin Check" value={point.pluginCheckVersion} />
-              <HistoryMeta label="Model" value={point.scoringModelVersion} className="col-span-2" />
+              <HistoryMeta label="Check" value={point.pluginCheckVersion} />
             </dl>
           </div>
         ))}
       </div>
 
       <div className="hidden overflow-x-auto sm:block">
-        <table className="min-w-[780px] w-full table-fixed border-collapse overflow-hidden rounded-md border border-line text-sm">
+        <table className="min-w-[680px] w-full table-fixed border-collapse overflow-hidden rounded-md border border-line text-sm">
           <thead>
             <tr className="border-b border-line text-left text-xs text-muted">
               <th className="w-32 px-3 py-3 font-medium">Scan</th>
@@ -771,8 +737,7 @@ function ScoreHistoryTable({ points }: { points: PluginScoreHistoryPoint[] }) {
               <th className="w-24 px-3 py-3 text-right font-medium">Errors</th>
               <th className="w-24 px-3 py-3 text-right font-medium">Warnings</th>
               <th className="px-3 py-3 font-medium">Plugin</th>
-              <th className="px-3 py-3 font-medium">Plugin Check</th>
-              <th className="px-3 py-3 font-medium">Model</th>
+              <th className="px-3 py-3 font-medium">Check</th>
             </tr>
           </thead>
           <tbody>
@@ -790,7 +755,6 @@ function ScoreHistoryTable({ points }: { points: PluginScoreHistoryPoint[] }) {
                 <td className="px-3 py-4 text-right font-mono">{point.warnings.toLocaleString()}</td>
                 <td className="break-all px-3 py-4 font-mono text-xs">v{point.pluginVersion}</td>
                 <td className="break-all px-3 py-4 font-mono text-xs">{point.pluginCheckVersion}</td>
-                <td className="break-all px-3 py-4 font-mono text-xs">{point.scoringModelVersion}</td>
               </tr>
             ))}
           </tbody>
@@ -1017,7 +981,6 @@ function scorePointTitle(point: PluginScoreHistoryPoint) {
     `Score ${point.score}/100`,
     `Plugin v${point.pluginVersion}`,
     `Plugin Check ${point.pluginCheckVersion}`,
-    `Scoring model ${point.scoringModelVersion}`,
     `${point.errors.toLocaleString()} errors, ${point.warnings.toLocaleString()} warnings`,
   ].join("\n");
 }
