@@ -991,11 +991,9 @@ export class PostgresStore implements PluginScoreStore {
         fc.severity_weight,
         fc.explanation,
         fc.fix_guidance,
-        count(distinct pcs.plugin_id)::integer as affected_plugins
+        coalesce(fcs.affected_plugins, 0)::integer as affected_plugins
       from finding_codes fc
-      left join audit_findings af on af.code = fc.code
-      left join plugin_current_scores pcs on pcs.audit_run_id = af.audit_run_id
-      group by fc.code
+      left join finding_code_stats fcs on fcs.code = fc.code
       order by affected_plugins desc, fc.code asc
     `);
 
@@ -1003,8 +1001,25 @@ export class PostgresStore implements PluginScoreStore {
   }
 
   async getIssue(code: string) {
-    const issues = await this.listIssues();
-    return issues.find((issue) => issue.code === decodeURIComponent(code)) ?? null;
+    const result = await this.pool.query(
+      `
+      select
+        fc.code,
+        fc.family,
+        fc.title,
+        fc.severity_weight,
+        fc.explanation,
+        fc.fix_guidance,
+        coalesce(fcs.affected_plugins, 0)::integer as affected_plugins
+      from finding_codes fc
+      left join finding_code_stats fcs on fcs.code = fc.code
+      where fc.code = $1
+      limit 1
+      `,
+      [decodeURIComponent(code)],
+    );
+
+    return result.rows[0] ? rowToIssueSummary(result.rows[0]) : null;
   }
 
   async listTrackedPlugins(options: ListTrackedPluginsOptions): Promise<TrackedPluginSummary[]> {
@@ -1301,6 +1316,11 @@ export class PostgresStore implements PluginScoreStore {
       } = scoreAuditSummary(summary);
       const errorCount = payload.findings.filter((finding) => finding.severity === "error").length;
       const warningCount = payload.findings.filter((finding) => finding.severity === "warning").length;
+      const previousIssueCodes = await getCurrentIssueCodesForPlugin(client, job.plugin_id);
+      const affectedIssueCodes = new Set([
+        ...previousIssueCodes,
+        ...payload.findings.map((finding) => finding.code),
+      ]);
 
       const runResult = await client.query<{ id: number }>(
         `
@@ -1388,6 +1408,7 @@ export class PostgresStore implements PluginScoreStore {
 
       await refreshCurrentScoreForPlugin(client, job.plugin_id);
       await pruneStaleAuditFindingsForPlugin(client, job.plugin_id);
+      await refreshFindingCodeStats(client, [...affectedIssueCodes]);
       await refreshPluginRankSnapshots(client);
 
       await client.query(
@@ -1645,6 +1666,20 @@ async function getJobForUpdate(client: PoolClient, id: number) {
   return job;
 }
 
+async function getCurrentIssueCodesForPlugin(client: PoolClient, pluginId: number) {
+  const result = await client.query<{ code: string }>(
+    `
+    select distinct af.code
+    from plugin_current_scores pcs
+    join audit_findings af on af.audit_run_id = pcs.audit_run_id
+    where pcs.plugin_id = $1
+    `,
+    [pluginId],
+  );
+
+  return result.rows.map((row) => row.code);
+}
+
 async function refreshCurrentScoreForPlugin(client: PoolClient, pluginId: number) {
   const result = await client.query(
     `
@@ -1742,6 +1777,38 @@ async function pruneStaleAuditFindingsForPlugin(client: PoolClient, pluginId: nu
       and af.audit_run_id <> pcs.audit_run_id
     `,
     [pluginId],
+  );
+}
+
+async function refreshFindingCodeStats(client: PoolClient, codes: string[]) {
+  const uniqueCodes = [...new Set(codes.filter(Boolean))];
+
+  if (uniqueCodes.length === 0) {
+    return;
+  }
+
+  await client.query(
+    `
+    with requested_codes as (
+      select distinct unnest($1::text[]) as code
+    ),
+    counts as (
+      select
+        requested_codes.code,
+        count(distinct pcs.plugin_id)::integer as affected_plugins
+      from requested_codes
+      left join audit_findings af on af.code = requested_codes.code
+      left join plugin_current_scores pcs on pcs.audit_run_id = af.audit_run_id
+      group by requested_codes.code
+    )
+    insert into finding_code_stats (code, affected_plugins, updated_at)
+    select code, affected_plugins, now()
+    from counts
+    on conflict (code) do update set
+      affected_plugins = excluded.affected_plugins,
+      updated_at = now()
+    `,
+    [uniqueCodes],
   );
 }
 

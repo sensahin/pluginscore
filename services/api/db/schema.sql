@@ -84,6 +84,17 @@ create table if not exists finding_codes (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists finding_code_stats (
+  code text primary key references finding_codes(code) on delete cascade,
+  affected_plugins integer not null default 0,
+  updated_at timestamptz not null default now()
+);
+
+insert into finding_code_stats (code, affected_plugins, updated_at)
+select code, 0, now()
+from finding_codes
+on conflict (code) do nothing;
+
 create table if not exists audit_runs (
   id bigserial primary key,
   plugin_id bigint not null references plugins(id) on delete cascade,
