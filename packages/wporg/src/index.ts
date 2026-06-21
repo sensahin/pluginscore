@@ -199,7 +199,16 @@ function pickAsset(assets: Record<string, string> | undefined, preferred: string
 }
 
 function isHttpUrl(value: unknown): value is string {
-  return typeof value === "string" && /^https?:\/\//.test(value);
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  try {
+    const url = new URL(value);
+    return (url.protocol === "http:" || url.protocol === "https:") && Boolean(url.hostname);
+  } catch {
+    return false;
+  }
 }
 
 function cleanText(value: unknown) {
