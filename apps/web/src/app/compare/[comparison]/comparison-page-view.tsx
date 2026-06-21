@@ -255,18 +255,26 @@ function ComparisonTable({
     values: ReactNode[];
   }>;
 }) {
-  const minWidth = 220 + entries.length * 220;
+  const labelColumnWidth = 220;
+  const valueColumnWidth = 280;
+  const minWidth = labelColumnWidth + entries.length * valueColumnWidth;
 
   return (
     <div className="overflow-x-auto">
       <table
-        className="w-full border-collapse text-sm"
+        className="w-full table-fixed border-collapse text-sm"
         style={{ minWidth }}
       >
+        <colgroup>
+          <col style={{ width: labelColumnWidth }} />
+          {entries.map((entry) => (
+            <col key={entry.plugin.slug} style={{ width: valueColumnWidth }} />
+          ))}
+        </colgroup>
         <tbody>
           {rows.map((row) => (
             <tr key={row.label} className="border-b border-line last:border-b-0">
-              <th className="w-52 px-4 py-4 text-left align-top text-xs font-medium uppercase text-muted">
+              <th className="px-4 py-4 text-left align-top text-xs font-medium uppercase text-muted">
                 {row.label}
               </th>
               {entries.map((entry, index) => (
