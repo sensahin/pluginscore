@@ -95,8 +95,8 @@ export default async function Home() {
             View latest
           </Link>
         </div>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {recentlyScanned.slice(0, 6).map((plugin) => (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+          {recentlyScanned.slice(0, 8).map((plugin) => (
             <PluginCard key={plugin.slug} plugin={plugin} />
           ))}
         </div>
