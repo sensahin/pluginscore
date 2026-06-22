@@ -34,17 +34,17 @@ export default async function Home() {
     searchPlugins,
     bestScored,
     mostInstalled,
+    mostDownloaded,
     recentlyScanned,
     mostIssues,
-    needsReview,
     popularCategories,
   ] = await Promise.all([
     getPlugins({ limit: LOCAL_PLUGIN_SUGGESTION_LIMIT, sort: "installs_desc" }),
     getPlugins({ limit: 12, sort: "score_desc", audited: true }),
     getPlugins({ limit: 12, sort: "installs_desc" }),
+    getPlugins({ limit: 12, sort: "downloads_desc" }),
     getPlugins({ limit: 12, sort: "scanned_desc", audited: true }),
     getPlugins({ limit: 12, sort: "issues_desc", audited: true }),
-    getPlugins({ limit: 5, sort: "score_asc", audited: true }),
     getTags(12, 3),
   ]);
 
@@ -105,14 +105,15 @@ export default async function Home() {
 
       <section className="grid gap-4 xl:grid-cols-2">
         <PluginHighlightList
-          title="Top Scores"
-          plugins={bestScored.slice(0, 5)}
-          viewAllHref="/rankings/best"
+          title="Most Installed"
+          plugins={mostInstalled.slice(0, 5)}
+          viewAllHref="/rankings/most-installed"
         />
         <PluginHighlightList
-          title="Needs Review"
-          plugins={needsReview}
-          viewAllHref="/rankings/worst"
+          title="Most Downloaded"
+          plugins={mostDownloaded.slice(0, 5)}
+          metric="downloads"
+          viewAllHref="/rankings/most-downloaded"
         />
       </section>
 

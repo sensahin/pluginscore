@@ -12,11 +12,13 @@ export function PluginHighlightList({
   plugins,
   viewAllHref,
   viewAllLabel = "View all",
+  metric = "installs",
 }: {
   title: string;
   plugins: PluginSummary[];
   viewAllHref?: string;
   viewAllLabel?: string;
+  metric?: "installs" | "downloads";
 }) {
   return (
     <section className="rounded-md border border-line bg-surface">
@@ -52,7 +54,11 @@ export function PluginHighlightList({
                     {plugin.name}
                   </Link>
                   <p className="mt-1 truncate text-xs text-muted">
-                    <span>{plugin.activeInstalls} active installs</span>
+                    <span>
+                      {metric === "downloads"
+                        ? `${plugin.downloads} downloads`
+                        : `${plugin.activeInstalls} active installs`}
+                    </span>
                     {plugin.topIssue ? <span> - {plugin.topIssue}</span> : null}
                   </p>
                 </div>
