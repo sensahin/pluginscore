@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { GoogleAnalytics } from "@/components/google-analytics";
 import { DEFAULT_SEO_DESCRIPTION, SITE_NAME } from "@/lib/seo";
 import "./globals.css";
@@ -58,6 +59,7 @@ export default function RootLayout({
         <GoogleAnalytics />
         {children}
         <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
