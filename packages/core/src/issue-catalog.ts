@@ -336,12 +336,17 @@ export function getIssueEditorial(issue: IssueLike): IssueEditorial {
   return issueEditorialCatalog[issue.code] ?? inferIssueEditorial(issue);
 }
 
+export function getIssueDisplayTitle(issue: Pick<IssueSummary, "code" | "title" | "family" | "weight">) {
+  const editorial = getIssueEditorial(issue);
+  return editorial.title ?? cleanTitle(issue);
+}
+
 export function enrichIssueSummary(issue: IssueSummary): IssueSummary {
   const editorial = getIssueEditorial(issue);
 
   return {
     ...issue,
-    title: editorial.title ?? issue.title,
+    title: editorial.title ?? cleanTitle(issue),
     explanation: editorial.summary,
     fix: editorial.fixSummary,
     summary: editorial.summary,
@@ -579,7 +584,7 @@ function nonceEditorial(issue: IssueLike, title: string): IssueEditorial {
   const required = issue.code.endsWith(".Missing");
 
   return {
-    title: required ? "Missing nonce verification" : title,
+    title: required ? "Missing nonce verification" : "Nonce verification recommended",
     summary: required
       ? "A request handler uses request data without verifying a WordPress nonce."
       : "A request handler reads request data in a place where nonce verification is recommended.",
@@ -1134,30 +1139,241 @@ function inferGlobalKind(code: string) {
 
 function cleanTitle(issue: IssueLike) {
   const title = issue.title.trim();
+  const explicitTitle = explicitGenericLeafTitle(issue.code);
 
-  if (
-    title &&
-    !["Found", "Missing", "Recommended", "Discouraged", "Mixed"].includes(title)
-  ) {
+  if (explicitTitle && (!title || isGeneratedCodeTitle(title, issue.code))) {
+    return explicitTitle;
+  }
+
+  if (title && !isGenericLeafTitle(title, issue.code)) {
     return title;
   }
 
-  const parts = issue.code
-    .split(/[._]/)
-    .filter(Boolean)
-    .slice(-3)
-    .join(" ")
+  return explicitTitle ?? titleFromCode(issue.code) ?? (title || issue.code);
+}
+
+const genericLeafTitles = new Set([
+  "Found",
+  "Missing",
+  "Recommended",
+  "Discouraged",
+  "Mixed",
+]);
+
+function isGenericLeafTitle(title: string, code: string) {
+  if (!title) return true;
+  if (genericLeafTitles.has(title)) return true;
+
+  return isGeneratedCodeTitle(title, code) && /\b(Found|Missing|Recommended|Discouraged|Mixed)$/.test(title);
+}
+
+function isGeneratedCodeTitle(title: string, code: string) {
+  const leafTitle = humanizeIssueSegment(lastCodeSegment(code));
+  return normalizeTitle(title) === normalizeTitle(leafTitle);
+}
+
+function explicitGenericLeafTitle(code: string) {
+  const lowerCode = code.toLowerCase();
+
+  if (code.includes("NonceVerification.Recommended")) {
+    return "Nonce verification recommended";
+  }
+
+  if (code.includes("NonceVerification.Missing")) {
+    return "Missing nonce verification";
+  }
+
+  if (code.includes("DeprecatedParameterValues")) {
+    return "Deprecated parameter value found";
+  }
+
+  if (code.includes("DeprecatedParameters")) {
+    return deprecatedParameterTitle(code);
+  }
+
+  if (code.includes("DeprecatedFunctions")) {
+    return deprecatedFunctionTitle(code);
+  }
+
+  if (code.includes("DeprecatedClasses")) {
+    return deprecatedClassTitle(code);
+  }
+
+  if (lowerCode.includes("load_plugin_textdomain")) {
+    return "Discouraged text-domain loading";
+  }
+
+  if (code.includes("RequiredFunctionParameters")) {
+    return requiredFunctionParameterTitle(code);
+  }
+
+  if (code.includes("SettingSanitization.register_settingMissing")) {
+    return "Setting is missing a sanitization callback";
+  }
+
+  if (code.includes("ForbiddenFunctions.Found")) {
+    return "Forbidden PHP function found";
+  }
+
+  if (code.includes("DiscouragedFunctions")) {
+    return "Discouraged PHP function";
+  }
+
+  if (code.includes("DiscouragedConstants")) {
+    return discouragedConstantTitle(code);
+  }
+
+  if (code.includes("DiscourageGoto")) {
+    return "Goto statement found";
+  }
+
+  if (code.includes("BacktickOperator")) {
+    return "Backtick operator found";
+  }
+
+  if (code.includes("ByteOrderMark")) {
+    return "Byte order mark found";
+  }
+
+  if (code.includes("DisallowAlternativePHPTags")) {
+    return "Alternative PHP tag found";
+  }
+
+  if (code.includes("DisallowShortOpenTag")) {
+    return "Short PHP open tag found";
+  }
+
+  if (code.includes("LineEndings.Mixed")) {
+    return "Mixed line endings";
+  }
+
+  if (lowerCode.includes("shorturl")) {
+    return "Short URL found";
+  }
+
+  if (lowerCode.includes("localhost")) {
+    return "Localhost URL found";
+  }
+
+  if (code.includes("PluginMenuSlug.Using__FILE__")) {
+    return "Plugin menu slug uses __FILE__";
+  }
+
+  if (code.includes("Internal.NoCodeFound")) {
+    return "No PHP code found";
+  }
+
+  if (code.includes("Internal.Exception")) {
+    return "Scanner exception";
+  }
+
+  return null;
+}
+
+function titleFromCode(code: string) {
+  const segments = code.split(".").filter(Boolean);
+  const leaf = lastCodeSegment(code);
+  const parent = segments.at(-2);
+  const leafTitle = humanizeIssueSegment(leaf);
+  const parentTitle = parent ? humanizeIssueSegment(parent) : "";
+  const genericLeaf = genericLeafFromSegment(leafTitle);
+  const base = trimGenericLeaf(leafTitle) || parentTitle;
+
+  if (!base) {
+    return null;
+  }
+
+  if (genericLeaf === "Recommended") {
+    return toSentenceCase(`${base} recommended`);
+  }
+
+  if (genericLeaf === "Missing") {
+    return toSentenceCase(`Missing ${base}`);
+  }
+
+  if (genericLeaf === "Discouraged") {
+    return toSentenceCase(`Discouraged ${base}`);
+  }
+
+  if (genericLeaf === "Mixed") {
+    return toSentenceCase(`Mixed ${base}`);
+  }
+
+  if (genericLeaf === "Found") {
+    return toSentenceCase(`${base} found`);
+  }
+
+  return toSentenceCase(base);
+}
+
+function deprecatedFunctionTitle(code: string) {
+  return `Deprecated function: ${cleanCodeIdentifier(lastCodeSegment(code))}`;
+}
+
+function deprecatedClassTitle(code: string) {
+  return `Deprecated class: ${cleanCodeIdentifier(lastCodeSegment(code))}`;
+}
+
+function deprecatedParameterTitle(code: string) {
+  const parameter = cleanCodeIdentifier(lastCodeSegment(code)).replace(
+    /Param(\d+)$/,
+    " parameter $1",
+  );
+  return `Deprecated parameter: ${parameter}`;
+}
+
+function requiredFunctionParameterTitle(code: string) {
+  return `Missing required parameter: ${cleanCodeIdentifier(lastCodeSegment(code))}`;
+}
+
+function discouragedConstantTitle(code: string) {
+  const leaf = stripGenericLeaf(lastCodeSegment(code)).trim();
+  const match = leaf.match(/^(.*?)(Declaration|Usage)$/);
+
+  if (!match) {
+    return `Discouraged WordPress constant: ${leaf}`;
+  }
+
+  const [, constant, usageType] = match;
+  return `Discouraged WordPress constant ${usageType.toLowerCase()}: ${constant}`;
+}
+
+function cleanCodeIdentifier(value: string) {
+  return stripGenericLeaf(value)
+    .replace(/^([A-Z])/, (match) => match.toLowerCase())
+    .trim();
+}
+
+function stripGenericLeaf(value: string) {
+  return value.replace(/(Found|Missing|Recommended|Discouraged|Mixed)$/, "");
+}
+
+function lastCodeSegment(code: string) {
+  return code.split(".").at(-1) ?? code;
+}
+
+function humanizeIssueSegment(value: string) {
+  return value
+    .replace(/_/g, " ")
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .replace(/\s+/g, " ")
     .trim();
-
-  return parts ? toTitleCase(parts) : title || issue.code;
 }
 
-function toTitleCase(value: string) {
-  return value
-    .split(" ")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+function genericLeafFromSegment(value: string) {
+  const match = value.match(/\b(Found|Missing|Recommended|Discouraged|Mixed)$/);
+  return match?.[1] ?? null;
+}
+
+function trimGenericLeaf(value: string) {
+  return value.replace(/\b(Found|Missing|Recommended|Discouraged|Mixed)$/, "").trim();
+}
+
+function normalizeTitle(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function toSentenceCase(value: string) {
+  const cleaned = value.replace(/\s+/g, " ").trim();
+  return cleaned ? cleaned.charAt(0).toUpperCase() + cleaned.slice(1) : cleaned;
 }

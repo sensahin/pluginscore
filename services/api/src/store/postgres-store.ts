@@ -30,7 +30,7 @@ import type {
   TagSummary,
   TrackedPluginSummary,
 } from "@pluginscore/core";
-import { enrichIssueSummary, getIssueEditorial } from "@pluginscore/core";
+import { enrichIssueSummary, getIssueDisplayTitle, getIssueEditorial } from "@pluginscore/core";
 import {
   SCORING_MODEL_VERSION,
   familyWeights,
@@ -2066,11 +2066,17 @@ async function refreshPluginRankSnapshots(client: PoolClient) {
 
 async function upsertFindingCode(client: PoolClient, finding: NormalizedFinding) {
   const family = inferFindingFamily(finding.code);
-  const title = humanizeCode(finding.code);
+  const inferredTitle = humanizeCode(finding.code);
   const severityWeight = familyWeights[family];
   const editorial = getIssueEditorial({
     code: finding.code,
-    title,
+    title: inferredTitle,
+    family,
+    weight: weightLabel(severityWeight),
+  });
+  const title = getIssueDisplayTitle({
+    code: finding.code,
+    title: inferredTitle,
     family,
     weight: weightLabel(severityWeight),
   });

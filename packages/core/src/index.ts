@@ -44,6 +44,7 @@ export type {
 } from "./types.js";
 export {
   enrichIssueSummary,
+  getIssueDisplayTitle,
   getIssueEditorial,
   issueEditorialCatalog,
 } from "./issue-catalog.js";
