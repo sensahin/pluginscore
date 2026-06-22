@@ -542,6 +542,25 @@ function inferIssueEditorial(issue: IssueLike): IssueEditorial {
 }
 
 function prefixGlobalsEditorial(issue: IssueLike): IssueEditorial {
+  if (issue.code.includes("DynamicHooknameFound")) {
+    return {
+      title: "Dynamic hook name",
+      summary:
+        "The plugin invokes a hook name built from a variable or expression that Plugin Check cannot verify as plugin-prefixed.",
+      whyItShowsUp:
+        "Plugin Check found a dynamic hook name such as a variable, array value, or concatenated expression. Static analysis cannot prove the final hook name starts with the plugin's namespace.",
+      whyItMatters:
+        "Dynamic hook names can be valid, but unclear naming makes collisions and unexpected integrations harder to reason about across WordPress, themes, and other plugins.",
+      fixSummary: "Use a stable plugin-prefixed hook name or tightly constrain the dynamic part.",
+      howToFix: [
+        "Prefer a literal hook name with the plugin prefix when the hook is part of the plugin's public API.",
+        "If the hook must be dynamic, keep a fixed plugin-prefixed base before the variable portion.",
+        "Document public dynamic hooks so integrators know the expected final hook names.",
+      ],
+      references: [references.codingStandards],
+    };
+  }
+
   const kind = inferGlobalKind(issue.code);
 
   return {
