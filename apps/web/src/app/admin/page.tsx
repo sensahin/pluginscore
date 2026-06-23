@@ -9,7 +9,6 @@ import {
   History,
   MessageSquareWarning,
   RotateCcw,
-  ShieldCheck,
   Timer,
   Wrench,
 } from "lucide-react";
@@ -35,7 +34,25 @@ export const metadata = {
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminPage() {
+type AdminPageProps = {
+  searchParams: Promise<{
+    view?: string;
+  }>;
+};
+
+type AdminView = "overview" | "queue" | "submissions" | "external" | "system";
+
+const adminViews: Array<{ id: AdminView; label: string }> = [
+  { id: "overview", label: "Overview" },
+  { id: "queue", label: "Queue" },
+  { id: "submissions", label: "Submissions" },
+  { id: "external", label: "External Connections" },
+  { id: "system", label: "System" },
+];
+
+export default async function AdminPage({ searchParams }: AdminPageProps) {
+  const { view } = await searchParams;
+  const activeView = parseAdminView(view);
   const [health, stats, queueJobs, retention, operations, reportStats, externalConnections] = await Promise.all([
     getHealth(),
     getFreshStats(),
@@ -170,63 +187,65 @@ export default async function AdminPage() {
                   <span className="font-mono text-muted">({reportStats.new.toLocaleString()} new)</span>
                 ) : null}
               </Link>
-              <span className="inline-flex items-center gap-2 font-medium text-muted">
-                <ShieldCheck size={16} aria-hidden="true" />
-                Basic auth
-              </span>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="rounded-md border border-line bg-surface p-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-brand">Audit overview</p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-normal">
-              Scan index snapshot
-            </h2>
-          </div>
-          <Gauge size={20} className="text-muted" aria-hidden="true" />
-        </div>
-        <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {metrics.map((metric) => (
-            <div
-              key={metric.label}
-              className="rounded-md border border-line bg-background p-4"
-            >
-              <p className="text-xs font-medium uppercase text-muted">
-                {metric.label}
-              </p>
-              <p className="mt-2 font-mono text-3xl font-semibold">
-                {metric.value}
-              </p>
-              <p className="mt-1 text-xs text-muted">{metric.detail}</p>
-            </div>
-          ))}
-        </div>
-      </section>
+      <AdminTabs activeView={activeView} />
 
-      {operations ? (
-        <section className="rounded-md border border-line bg-surface p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-brand">Operations</p>
-              <h2 className="mt-2 text-2xl font-semibold tracking-normal">
-                Pipeline visibility
-              </h2>
+      {activeView === "overview" ? (
+        <>
+          <section className="rounded-md border border-line bg-surface p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-brand">Audit overview</p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-normal">
+                  Scan index snapshot
+                </h2>
+              </div>
+              <Gauge size={20} className="text-muted" aria-hidden="true" />
             </div>
-            <Timer size={20} className="text-muted" aria-hidden="true" />
-          </div>
-          <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {operationsMetrics.map((metric) => (
-              <MetricCard key={metric.label} {...metric} />
-            ))}
-          </div>
-        </section>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {metrics.map((metric) => (
+                <div
+                  key={metric.label}
+                  className="rounded-md border border-line bg-background p-4"
+                >
+                  <p className="text-xs font-medium uppercase text-muted">
+                    {metric.label}
+                  </p>
+                  <p className="mt-2 font-mono text-3xl font-semibold">
+                    {metric.value}
+                  </p>
+                  <p className="mt-1 text-xs text-muted">{metric.detail}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {operations ? (
+            <section className="rounded-md border border-line bg-surface p-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-brand">Operations</p>
+                  <h2 className="mt-2 text-2xl font-semibold tracking-normal">
+                    Pipeline visibility
+                  </h2>
+                </div>
+                <Timer size={20} className="text-muted" aria-hidden="true" />
+              </div>
+              <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {operationsMetrics.map((metric) => (
+                  <MetricCard key={metric.label} {...metric} />
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </>
       ) : null}
 
-      {externalConnections ? (
+      {activeView === "external" && externalConnections ? (
         <section className="rounded-md border border-line bg-surface">
           <div className="flex flex-col gap-4 border-b border-line p-5 lg:flex-row lg:items-start lg:justify-between">
             <div className="flex items-start gap-3">
@@ -328,7 +347,7 @@ export default async function AdminPage() {
         </section>
       ) : null}
 
-      {operations ? (
+      {activeView === "submissions" && operations ? (
         <section className="rounded-md border border-line bg-surface">
           <div className="flex items-center justify-between border-b border-line p-5">
             <div>
@@ -397,8 +416,8 @@ export default async function AdminPage() {
         </section>
       ) : null}
 
-      <section className="grid gap-4 lg:grid-cols-[320px_1fr]">
-        <aside className="space-y-4">
+      {activeView === "system" ? (
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <section className="rounded-md border border-line bg-surface p-5">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-semibold">Backend Health</h2>
@@ -475,9 +494,12 @@ export default async function AdminPage() {
               </section>
             </>
           ) : null}
-        </aside>
+        </section>
+      ) : null}
 
-        <section className="rounded-md border border-line bg-surface">
+      {activeView === "queue" ? (
+        <>
+          <section className="rounded-md border border-line bg-surface">
           <div className="flex items-center justify-between border-b border-line p-5">
             <h2 className="text-base font-semibold">Worker Queue</h2>
             <Clock3 size={18} className="text-muted" aria-hidden="true" />
@@ -494,9 +516,9 @@ export default async function AdminPage() {
                 </tr>
               </thead>
               <tbody>
-                {queueJobs.map((job) => (
+                {queueJobs.map((job, index) => (
                   <tr
-                    key={`${job.plugin}-${job.version}-${job.state}-${job.reason}`}
+                    key={`${job.plugin}-${job.version}-${job.state}-${job.reason}-${index}`}
                     className="border-b border-line"
                   >
                     <td className="px-5 py-4 font-mono">{job.plugin}</td>
@@ -521,11 +543,10 @@ export default async function AdminPage() {
               </tbody>
             </table>
           </div>
-        </section>
-      </section>
+          </section>
 
-      {operations ? (
-        <section className="grid gap-4">
+          {operations ? (
+            <section className="grid gap-4">
           <section className="rounded-md border border-line bg-surface">
             <div className="flex items-center justify-between border-b border-line p-5">
               <h2 className="text-base font-semibold">Recent Completed Scans</h2>
@@ -601,10 +622,42 @@ export default async function AdminPage() {
               <p className="p-5 text-sm text-muted">No recent failures.</p>
             )}
           </section>
-        </section>
+            </section>
+          ) : null}
+        </>
       ) : null}
 
     </AppShell>
+  );
+}
+
+function AdminTabs({ activeView }: { activeView: AdminView }) {
+  return (
+    <nav
+      aria-label="Admin sections"
+      className="rounded-md border border-line bg-surface p-2"
+    >
+      <div className="flex flex-wrap gap-2">
+        {adminViews.map((view) => {
+          const isActive = view.id === activeView;
+
+          return (
+            <Link
+              key={view.id}
+              href={view.id === "overview" ? "/admin" : `/admin?view=${view.id}`}
+              aria-current={isActive ? "page" : undefined}
+              className={`inline-flex h-10 items-center justify-center rounded-md border px-3 text-sm font-semibold transition ${
+                isActive
+                  ? "border-brand/40 bg-brand/10 text-foreground"
+                  : "border-line text-muted hover:bg-surface-subtle hover:text-foreground"
+              }`}
+            >
+              {view.label}
+            </Link>
+          );
+        })}
+      </div>
+    </nav>
   );
 }
 
@@ -640,6 +693,10 @@ function Meta({ label, value }: { label: string; value: string }) {
       </span>
     </div>
   );
+}
+
+function parseAdminView(value?: string): AdminView {
+  return adminViews.some((view) => view.id === value) ? (value as AdminView) : "overview";
 }
 
 function formatBytes(bytes: number) {
