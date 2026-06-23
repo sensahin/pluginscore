@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     sampleRemaining,
   });
 
-  return NextResponse.redirect(new URL("/admin", request.url), { status: 303 });
+  return NextResponse.redirect(new URL("/admin?view=external", request.url), { status: 303 });
 }
 
 function parseMode(value: FormDataEntryValue | null): ExternalConnectionAnalysisMode {

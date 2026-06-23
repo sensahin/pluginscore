@@ -13,6 +13,7 @@ import {
   Wrench,
 } from "lucide-react";
 import Link from "next/link";
+import { AdminExternalConnectionSettingsForm } from "@/components/admin-external-connection-settings-form";
 import { AppShell } from "@/components/app-shell";
 import {
   getAuditFindingsRetention,
@@ -259,41 +260,10 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                 </h2>
               </div>
             </div>
-            <form
-              action="/admin/external-connections"
-              method="post"
-              className="grid gap-3 sm:grid-cols-[minmax(0,12rem)_8rem_auto]"
-            >
-              <label className="grid gap-1 text-xs font-medium uppercase text-muted">
-                Mode
-                <select
-                  name="mode"
-                  defaultValue={externalConnections.settings.mode}
-                  className="h-10 rounded-md border border-line bg-background px-3 text-sm normal-case text-foreground"
-                >
-                  <option value="off">Off</option>
-                  <option value="new_scans">New scans</option>
-                  <option value="sample">Sample</option>
-                </select>
-              </label>
-              <label className="grid gap-1 text-xs font-medium uppercase text-muted">
-                Sample
-                <input
-                  name="sampleRemaining"
-                  type="number"
-                  min="0"
-                  max="1000"
-                  defaultValue={externalConnections.settings.mode === "sample" ? externalConnections.settings.sampleRemaining : 25}
-                  className="h-10 rounded-md border border-line bg-background px-3 text-sm normal-case text-foreground"
-                />
-              </label>
-              <button
-                type="submit"
-                className="inline-flex h-10 items-center justify-center self-end rounded-md border border-line px-3 text-sm font-semibold transition hover:bg-surface-subtle"
-              >
-                Save
-              </button>
-            </form>
+            <AdminExternalConnectionSettingsForm
+              mode={externalConnections.settings.mode}
+              sampleRemaining={externalConnections.settings.sampleRemaining}
+            />
           </div>
           <div className="grid gap-3 border-b border-line p-5 sm:grid-cols-2 xl:grid-cols-4">
             {externalConnectionMetrics.map((metric) => (
