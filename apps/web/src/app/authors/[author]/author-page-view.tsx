@@ -15,24 +15,44 @@ import { seoMetadata } from "@/lib/seo";
 
 export const authorSorts = {
   score_desc: {
-    label: "Best scored",
-    title: "Best Scored",
+    label: "Top Scores",
+    title: "Top Scores",
     segment: "",
   },
+  score_asc: {
+    label: "Needs Review",
+    title: "Needs Review",
+    segment: "needs-review",
+  },
   installs_desc: {
-    label: "Most installed",
+    label: "Most Installed",
     title: "Most Installed",
     segment: "most-installed",
   },
-  scanned_desc: {
-    label: "Recently scanned",
-    title: "Recently Scanned",
-    segment: "recently-scanned",
+  downloads_desc: {
+    label: "Most Downloaded",
+    title: "Most Downloaded",
+    segment: "most-downloaded",
+  },
+  new_popular_desc: {
+    label: "New & Popular",
+    title: "New & Popular",
+    segment: "new-popular",
   },
   issues_desc: {
-    label: "Most issues",
+    label: "Most Issues",
     title: "Most Issues",
     segment: "most-issues",
+  },
+  delta_desc: {
+    label: "Most Improved",
+    title: "Most Improved",
+    segment: "most-improved",
+  },
+  scanned_desc: {
+    label: "Recently Scanned",
+    title: "Recently Scanned",
+    segment: "recently-scanned",
   },
 } as const;
 
@@ -112,10 +132,7 @@ export async function generateAuthorMetadata({
     detail && detail.pluginCount > 0
       ? `${displayName} WordPress plugins: ${detail.pluginCount} indexed plugin${detail.pluginCount === 1 ? "" : "s"}${installText}${scoreText}. See audits, findings, downloads, and metadata.`
       : `Browse WordPress plugins by ${displayName}, including PluginScore audit results, findings, installs, downloads, and repository metadata.`;
-  const title =
-    sort === "score_desc"
-      ? `${displayName} WordPress Plugins`
-      : `${displayName} ${authorSorts[sort].title} WordPress Plugins`;
+  const title = authorSeoTitle(displayName, sort);
 
   return {
     ...seoMetadata({
@@ -151,7 +168,11 @@ export async function AuthorPageView({
   }
 
   const auditedOnly =
-    sort === "score_desc" || sort === "scanned_desc" || sort === "issues_desc";
+    sort === "score_desc" ||
+    sort === "score_asc" ||
+    sort === "scanned_desc" ||
+    sort === "issues_desc" ||
+    sort === "delta_desc";
   const plugins = await getPluginsPage({
     page,
     perPage: PLUGIN_DIRECTORY_PER_PAGE,
@@ -264,9 +285,9 @@ export async function AuthorPageView({
       </section>
 
       <section className="rounded-md border border-line bg-surface">
-        <div className="flex flex-col gap-4 border-b border-line p-5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="border-b border-line p-5">
           <h2 className="text-xl font-semibold">{authorSorts[sort].title}</h2>
-          <nav className="flex flex-wrap gap-2">
+          <nav className="mt-4 flex flex-wrap gap-2">
             {(Object.keys(authorSorts) as AuthorSort[]).map((sortKey) => (
               <Link
                 key={sortKey}
@@ -296,6 +317,26 @@ export async function AuthorPageView({
       </section>
     </AppShell>
   );
+}
+
+function authorSeoTitle(displayName: string, sort: AuthorSort) {
+  if (sort === "score_desc") {
+    return `${displayName} WordPress Plugins`;
+  }
+
+  if (sort === "score_asc") {
+    return `${displayName} WordPress Plugins That Need Review`;
+  }
+
+  if (sort === "issues_desc") {
+    return `${displayName} WordPress Plugins with Most Issues`;
+  }
+
+  if (sort === "new_popular_desc") {
+    return `New & Popular ${displayName} WordPress Plugins`;
+  }
+
+  return `${authorSorts[sort].title} ${displayName} WordPress Plugins`;
 }
 
 function AuthorStat({

@@ -253,9 +253,9 @@ export async function TagPageView({
       </section>
 
       <section className="rounded-md border border-line bg-surface">
-        <div className="flex flex-col gap-4 border-b border-line p-5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="border-b border-line p-5">
           <h2 className="text-xl font-semibold">{tagSorts[sort].titleSuffix}</h2>
-          <nav className="flex flex-wrap gap-2">
+          <nav className="mt-4 flex flex-wrap gap-2">
             {(Object.keys(tagSorts) as TagSort[]).map((sortKey) => (
               <Link
                 key={sortKey}

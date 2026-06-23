@@ -30,6 +30,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     "most-improved",
     "recently-scanned",
   ];
+  const authorSortSegments = tagSortSegments;
   const categoryRoutes = [
     ...new Set(issues.map((issue) => `/categories/${slugifyLabel(issue.family)}`)),
   ];
@@ -59,10 +60,20 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     lastModified: now,
   }));
 
-  const authorRoutes = authors.map((author) => ({
-    url: `https://pluginscore.com/authors/${encodeURIComponent(author.name)}`,
-    lastModified: now,
-  }));
+  const authorRoutes = authors.flatMap((author) => {
+    const authorPath = `/authors/${encodeURIComponent(author.name)}`;
+
+    return [
+      {
+        url: `https://pluginscore.com${authorPath}`,
+        lastModified: now,
+      },
+      ...authorSortSegments.map((segment) => ({
+        url: `https://pluginscore.com${authorPath}/${segment}`,
+        lastModified: now,
+      })),
+    ];
+  });
 
   const tagRoutes = tags.flatMap((tag) => {
     const tagPath = `/tags/${encodeURIComponent(tag.slug)}`;
