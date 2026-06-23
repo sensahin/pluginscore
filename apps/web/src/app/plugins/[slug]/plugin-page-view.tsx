@@ -24,12 +24,13 @@ import {
 import { AppShell } from "@/components/app-shell";
 import { PluginBadgeCard } from "@/components/plugin-badge-card";
 import { PluginIcon } from "@/components/plugin-icon";
+import { PluginRelationshipMap } from "@/components/plugin-relationship-map";
 import { PluginReportCard } from "@/components/plugin-report-card";
 import { RelativeDate } from "@/components/relative-date";
 import { PluginSubmissionAction } from "@/components/plugin-submission-action";
 import { RelatedPluginTabs, type RelatedPluginTab } from "@/components/related-plugin-tabs";
 import { TagChips } from "@/components/tag-chips";
-import { getAuthor, getPlugins } from "@/lib/api";
+import { getAuthor, getPlugins, getPluginsPage } from "@/lib/api";
 import { groupFindingCodeCounts } from "@/lib/finding-groups";
 import { formatExactDate, formatShortDate, formatSlugTitle } from "@/lib/formatting";
 import {
@@ -38,6 +39,10 @@ import {
   withoutPlugin,
 } from "@/lib/plugin-list-utils";
 import { formatPluginDirectoryAge } from "@/lib/plugin-age";
+import {
+  buildPluginRelationshipMap,
+  type RelationshipIssuePluginGroup,
+} from "@/lib/plugin-relationship-map";
 import { scoreDelta } from "@/lib/plugin-score-data";
 
 const pluginPageGridClass =
@@ -50,7 +55,15 @@ export async function PluginPageView({
   plugin: PluginDetail;
   history: PluginScoreHistoryPoint[];
 }) {
-  const relatedTabs = await getRelatedPluginTabs(plugin);
+  const [relatedTabs, issueRelatedPluginGroups] = await Promise.all([
+    getRelatedPluginTabs(plugin),
+    getIssueRelatedPluginGroups(plugin),
+  ]);
+  const relationshipMap = buildPluginRelationshipMap(
+    plugin,
+    relatedTabs,
+    issueRelatedPluginGroups,
+  );
   const supportRate =
     plugin.supportThreads && plugin.supportThreadsResolved !== undefined
       ? Math.round((plugin.supportThreadsResolved / plugin.supportThreads) * 100)
@@ -85,6 +98,8 @@ export async function PluginPageView({
             />
           </div>
         </section>
+
+        <PluginRelationshipMap data={relationshipMap} />
       </div>
     </AppShell>
   );
@@ -160,6 +175,35 @@ async function getRelatedPluginTabs(plugin: PluginDetail): Promise<RelatedPlugin
     { id: "installed-tags", label: "Popular", plugins: mostInstalledInTags },
     { id: "same-author", label: "Author", plugins: sameAuthor },
   ];
+}
+
+async function getIssueRelatedPluginGroups(plugin: PluginDetail): Promise<RelationshipIssuePluginGroup[]> {
+  const findings = (plugin.topFindings ?? []).slice(0, 2);
+
+  if (!findings.length) {
+    return [];
+  }
+
+  const pages = await Promise.all(
+    findings.map((finding) =>
+      getPluginsPage({
+        perPage: 8,
+        sort: "installs_desc",
+        audited: true,
+        issueCode: finding.code,
+      }),
+    ),
+  );
+
+  return findings
+    .map((finding, index) => ({
+      issue: finding,
+      plugins: withoutPlugin(
+        uniquePluginsBySlug(pages[index]?.items ?? []),
+        plugin.slug,
+      ).slice(0, 6),
+    }))
+    .filter((group) => group.plugins.length > 0);
 }
 
 function PluginSummaryHeader({
