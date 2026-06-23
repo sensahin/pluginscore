@@ -97,37 +97,39 @@ export function PluginTabbedList({
 
   return (
     <section className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="space-y-3">
         <h2 id={headingId} className="text-xl font-semibold">{title}</h2>
-        <div
-          role="tablist"
-          aria-labelledby={headingId}
-          className="flex flex-wrap gap-2"
-        >
-          {availableTabs.map((tab, index) => {
-            const isSelected = tab.id === selectedTab.id;
+        <div className="-mx-1 overflow-x-auto px-1 pb-1">
+          <div
+            role="tablist"
+            aria-labelledby={headingId}
+            className="flex w-max min-w-full gap-2"
+          >
+            {availableTabs.map((tab, index) => {
+              const isSelected = tab.id === selectedTab.id;
 
-            return (
-              <button
-                key={tab.id}
-                id={tabId(tab.id)}
-                type="button"
-                role="tab"
-                aria-selected={isSelected}
-                aria-controls={panelId(tab.id)}
-                tabIndex={isSelected ? 0 : -1}
-                onClick={() => setSelectedId(tab.id)}
-                onKeyDown={(event) => handleTabKeyDown(event, index)}
-                className={`rounded-md border px-3 py-2 text-sm font-medium transition ${
-                  isSelected
-                    ? "border-brand/40 bg-brand/10 text-foreground"
-                    : "border-line text-muted hover:bg-surface-subtle hover:text-foreground"
-                }`}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
+              return (
+                <button
+                  key={tab.id}
+                  id={tabId(tab.id)}
+                  type="button"
+                  role="tab"
+                  aria-selected={isSelected}
+                  aria-controls={panelId(tab.id)}
+                  tabIndex={isSelected ? 0 : -1}
+                  onClick={() => setSelectedId(tab.id)}
+                  onKeyDown={(event) => handleTabKeyDown(event, index)}
+                  className={`shrink-0 rounded-md border px-3 py-2 text-sm font-medium transition ${
+                    isSelected
+                      ? "border-brand/40 bg-brand/10 text-foreground"
+                      : "border-line text-muted hover:bg-surface-subtle hover:text-foreground"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 

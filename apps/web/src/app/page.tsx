@@ -33,18 +33,24 @@ export default async function Home() {
   const [
     searchPlugins,
     bestScored,
+    needsReview,
     mostInstalled,
     mostDownloaded,
+    newPopular,
     recentlyScanned,
     mostIssues,
+    mostImproved,
     popularCategories,
   ] = await Promise.all([
     getPlugins({ limit: LOCAL_PLUGIN_SUGGESTION_LIMIT, sort: "installs_desc" }),
     getPlugins({ limit: 12, sort: "score_desc", audited: true }),
+    getPlugins({ limit: 12, sort: "score_asc", audited: true }),
     getPlugins({ limit: 12, sort: "installs_desc" }),
     getPlugins({ limit: 12, sort: "downloads_desc" }),
+    getPlugins({ limit: 12, sort: "new_popular_desc" }),
     getPlugins({ limit: 12, sort: "scanned_desc", audited: true }),
     getPlugins({ limit: 12, sort: "issues_desc", audited: true }),
+    getPlugins({ limit: 12, sort: "delta_desc", audited: true }),
     getTags(12, 3),
   ]);
 
@@ -119,11 +125,16 @@ export default async function Home() {
 
       <PluginTabbedList
         title="Browse Plugins"
+        initialTabId="most-installed"
         tabs={[
-          { id: "best", label: "Best scored", plugins: bestScored },
-          { id: "installed", label: "Most installed", plugins: mostInstalled },
-          { id: "scanned", label: "Recently scanned", plugins: recentlyScanned },
-          { id: "issues", label: "Most issues", plugins: mostIssues },
+          { id: "top-scores", label: "Top Scores", plugins: bestScored },
+          { id: "needs-review", label: "Needs Review", plugins: needsReview },
+          { id: "most-installed", label: "Most Installed", plugins: mostInstalled },
+          { id: "most-downloaded", label: "Most Downloaded", plugins: mostDownloaded },
+          { id: "new-popular", label: "New & Popular", plugins: newPopular },
+          { id: "most-issues", label: "Most Issues", plugins: mostIssues },
+          { id: "most-improved", label: "Most Improved", plugins: mostImproved },
+          { id: "recently-scanned", label: "Recently Scanned", plugins: recentlyScanned },
         ]}
       />
     </AppShell>
