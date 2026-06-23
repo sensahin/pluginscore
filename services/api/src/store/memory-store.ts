@@ -439,15 +439,33 @@ export class MemoryStore implements PluginScoreStore {
       return null;
     }
 
-    const auditedOnly = options.sort === "score_desc" || options.sort === "scanned_desc" || options.sort === "issues_desc";
+    const auditedOnly =
+      options.sort === "score_desc" ||
+      options.sort === "score_asc" ||
+      options.sort === "scanned_desc" ||
+      options.sort === "issues_desc" ||
+      options.sort === "delta_desc";
     const tagPlugins = plugins
       .filter((plugin) => plugin.tags?.some((tag) => tag.slug === normalized))
       .filter((plugin) => !auditedOnly || plugin.latestAudit?.status === "complete")
+      .filter((plugin) => options.sort !== "new_popular_desc" || isNewPopularPlugin(plugin))
       .sort((a, b) => {
+        if (options.sort === "score_asc") return a.score - b.score || a.slug.localeCompare(b.slug);
         if (options.sort === "installs_desc") return parseDownloads(b.activeInstalls) - parseDownloads(a.activeInstalls);
+        if (options.sort === "downloads_desc") return parseDownloads(b.downloads) - parseDownloads(a.downloads);
+        if (options.sort === "new_popular_desc") {
+          return (
+            parseDownloads(b.activeInstalls) - parseDownloads(a.activeInstalls) ||
+            (b.addedAt ?? "").localeCompare(a.addedAt ?? "") ||
+            parseDownloads(b.downloads) - parseDownloads(a.downloads) ||
+            (b.rating ?? 0) - (a.rating ?? 0) ||
+            a.slug.localeCompare(b.slug)
+          );
+        }
         if (options.sort === "scanned_desc") return auditCompletedAt(b).localeCompare(auditCompletedAt(a));
         if (options.sort === "issues_desc") return b.findings - a.findings;
-        return b.score - a.score;
+        if (options.sort === "delta_desc") return scoreDelta(b) - scoreDelta(a) || a.slug.localeCompare(b.slug);
+        return b.score - a.score || a.slug.localeCompare(b.slug);
       })
       .slice(0, options.limit);
 

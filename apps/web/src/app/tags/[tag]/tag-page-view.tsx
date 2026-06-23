@@ -15,24 +15,44 @@ import { seoDisplayName, seoMetadata } from "@/lib/seo";
 
 export const tagSorts = {
   score_desc: {
-    label: "Best scored",
-    titleSuffix: "Best Scored",
+    label: "Top Scores",
+    titleSuffix: "Top Scores",
     segment: "",
   },
+  score_asc: {
+    label: "Needs Review",
+    titleSuffix: "Needs Review",
+    segment: "needs-review",
+  },
   installs_desc: {
-    label: "Most installed",
+    label: "Most Installed",
     titleSuffix: "Most Installed",
     segment: "most-installed",
   },
-  scanned_desc: {
-    label: "Recently scanned",
-    titleSuffix: "Recently Scanned",
-    segment: "recently-scanned",
+  downloads_desc: {
+    label: "Most Downloaded",
+    titleSuffix: "Most Downloaded",
+    segment: "most-downloaded",
+  },
+  new_popular_desc: {
+    label: "New & Popular",
+    titleSuffix: "New & Popular",
+    segment: "new-popular",
   },
   issues_desc: {
-    label: "Most issues",
+    label: "Most Issues",
     titleSuffix: "Most Issues",
     segment: "most-issues",
+  },
+  delta_desc: {
+    label: "Most Improved",
+    titleSuffix: "Most Improved",
+    segment: "most-improved",
+  },
+  scanned_desc: {
+    label: "Recently Scanned",
+    titleSuffix: "Recently Scanned",
+    segment: "recently-scanned",
   },
 } as const;
 
@@ -130,7 +150,11 @@ export async function TagPageView({
   page = 1,
 }: TagPageViewProps) {
   const auditedOnly =
-    sort === "score_desc" || sort === "scanned_desc" || sort === "issues_desc";
+    sort === "score_desc" ||
+    sort === "score_asc" ||
+    sort === "scanned_desc" ||
+    sort === "issues_desc" ||
+    sort === "delta_desc";
   const [detail, plugins] = await Promise.all([
     getTag(tag, sort, 10),
     getPluginsPage({
@@ -293,7 +317,7 @@ function titleFromTagSlug(slug: string) {
 
 function tagSeoTitle(displayName: string, sort: TagSort) {
   if (sort === "score_desc") {
-    return `Best ${displayName} WordPress Plugins by Audit Score`;
+    return `Top ${displayName} WordPress Plugins by Audit Score`;
   }
 
   return tagPageTitle(displayName, sort);
@@ -301,11 +325,19 @@ function tagSeoTitle(displayName: string, sort: TagSort) {
 
 function tagPageTitle(displayName: string, sort: TagSort) {
   if (sort === "score_desc") {
-    return `Best ${displayName} WordPress Plugins`;
+    return `Top ${displayName} WordPress Plugins`;
+  }
+
+  if (sort === "score_asc") {
+    return `${displayName} WordPress Plugins That Need Review`;
   }
 
   if (sort === "issues_desc") {
     return `${displayName} WordPress Plugins with Most Issues`;
+  }
+
+  if (sort === "new_popular_desc") {
+    return `New & Popular ${displayName} WordPress Plugins`;
   }
 
   return `${tagSorts[sort].titleSuffix} ${displayName} WordPress Plugins`;

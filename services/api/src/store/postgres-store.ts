@@ -1083,12 +1083,28 @@ export class PostgresStore implements PluginScoreStore {
       return null;
     }
 
-    const auditedOnly = options.sort === "score_desc" || options.sort === "scanned_desc" || options.sort === "issues_desc";
+    const auditedOnly =
+      options.sort === "score_desc" ||
+      options.sort === "score_asc" ||
+      options.sort === "scanned_desc" ||
+      options.sort === "issues_desc" ||
+      options.sort === "delta_desc";
+    const newPopularOnly = options.sort === "new_popular_desc";
     const orderBy = {
       score_desc: "coalesce(pcs.score, 0) desc, p.slug asc",
+      score_asc: "coalesce(pcs.score, 0) asc, p.slug asc",
       installs_desc: "coalesce(p.active_installs, 0) desc, p.slug asc",
+      downloads_desc: "coalesce(p.downloads, 0) desc, p.slug asc",
+      new_popular_desc: `
+        coalesce(p.active_installs, 0) desc,
+        p.wporg_added_at desc nulls last,
+        coalesce(p.downloads, 0) desc,
+        coalesce(p.rating, 0) desc,
+        p.slug asc
+      `,
       scanned_desc: "pcs.scanned_at desc nulls last, p.slug asc",
       issues_desc: "coalesce(pcs.total_findings, 0) desc, p.slug asc",
+      delta_desc: "(coalesce(pcs.score, 0) - coalesce(pcs.previous_score, pcs.score, 0)) desc, p.slug asc",
     }[options.sort];
 
     const pluginResult = await this.pool.query(
@@ -1101,10 +1117,18 @@ export class PostgresStore implements PluginScoreStore {
       ${pluginTagsSelectSql()}
       where current_t.slug = $1
         and ($3::boolean = false or pcs.audit_run_id is not null)
+        and (
+          $4::boolean = false
+          or (
+            p.wporg_added_at is not null
+            and p.wporg_added_at >= current_date - interval '24 months'
+            and coalesce(p.active_installs, 0) >= 1000
+          )
+        )
       order by ${orderBy}
       limit $2
       `,
-      [normalizedSlug, options.limit, auditedOnly],
+      [normalizedSlug, options.limit, auditedOnly, newPopularOnly],
     );
 
     return {

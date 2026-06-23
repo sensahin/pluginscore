@@ -21,6 +21,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     "/rankings/most-improved",
     "/rankings/recently-updated",
   ];
+  const tagSortSegments = [
+    "needs-review",
+    "most-installed",
+    "most-downloaded",
+    "new-popular",
+    "most-issues",
+    "most-improved",
+    "recently-scanned",
+  ];
   const categoryRoutes = [
     ...new Set(issues.map((issue) => `/categories/${slugifyLabel(issue.family)}`)),
   ];
@@ -55,10 +64,20 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     lastModified: now,
   }));
 
-  const tagRoutes = tags.map((tag) => ({
-    url: `https://pluginscore.com/tags/${encodeURIComponent(tag.slug)}`,
-    lastModified: now,
-  }));
+  const tagRoutes = tags.flatMap((tag) => {
+    const tagPath = `/tags/${encodeURIComponent(tag.slug)}`;
+
+    return [
+      {
+        url: `https://pluginscore.com${tagPath}`,
+        lastModified: now,
+      },
+      ...tagSortSegments.map((segment) => ({
+        url: `https://pluginscore.com${tagPath}/${segment}`,
+        lastModified: now,
+      })),
+    ];
+  });
 
   return [...routes, ...pluginRoutes, ...issueRoutes, ...authorRoutes, ...tagRoutes];
 }

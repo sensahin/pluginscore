@@ -86,7 +86,15 @@ export type ListTagsOptions = {
 
 export type GetTagOptions = {
   limit: number;
-  sort: "score_desc" | "installs_desc" | "scanned_desc" | "issues_desc";
+  sort:
+    | "score_desc"
+    | "score_asc"
+    | "installs_desc"
+    | "downloads_desc"
+    | "new_popular_desc"
+    | "issues_desc"
+    | "delta_desc"
+    | "scanned_desc";
 };
 
 export type EnqueueJobInput = WordPressPluginMetadata & {

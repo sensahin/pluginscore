@@ -39,7 +39,15 @@ type PluginSort =
   | "delta_desc"
   | "new_popular_desc"
   | "relevance_desc";
-type TagSort = "score_desc" | "installs_desc" | "scanned_desc" | "issues_desc";
+type TagSort =
+  | "score_desc"
+  | "score_asc"
+  | "installs_desc"
+  | "downloads_desc"
+  | "new_popular_desc"
+  | "issues_desc"
+  | "delta_desc"
+  | "scanned_desc";
 type PluginsPageOptions = {
   page?: number;
   perPage?: number;
@@ -554,10 +562,16 @@ function sampleTag(tagSlug: string, sort: TagSort, limit: number): TagDetail | n
     return null;
   }
 
-  const auditedOnly = sort === "score_desc" || sort === "scanned_desc" || sort === "issues_desc";
+  const auditedOnly =
+    sort === "score_desc" ||
+    sort === "score_asc" ||
+    sort === "scanned_desc" ||
+    sort === "issues_desc" ||
+    sort === "delta_desc";
   const tagPlugins = samplePlugins
     .filter((plugin) => plugin.tags?.some((tag) => tag.slug === normalized))
-    .filter((plugin) => !auditedOnly || plugin.latestAudit?.status === "complete");
+    .filter((plugin) => !auditedOnly || plugin.latestAudit?.status === "complete")
+    .filter((plugin) => sort !== "new_popular_desc" || isSampleNewPopularPlugin(plugin));
 
   return {
     ...summary,
