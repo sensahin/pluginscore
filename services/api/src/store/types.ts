@@ -38,6 +38,7 @@ export type ListPluginsOptions = {
     | "scanned_desc"
     | "issues_desc"
     | "delta_desc"
+    | "new_popular_desc"
     | "relevance_desc";
   query?: string;
   auditedOnly?: boolean;

@@ -43,6 +43,14 @@ export const rankingKinds = {
     sort: "downloads_desc",
     audited: false,
   },
+  "new-popular": {
+    title: "New & Popular Plugins",
+    seoTitle: "New & Popular WordPress Plugins",
+    description:
+      "WordPress plugins added in the last 24 months that already have meaningful active installs.",
+    sort: "new_popular_desc",
+    audited: false,
+  },
   "most-issues": {
     title: "Most Issues",
     seoTitle: "WordPress Plugins With the Most Issues",
@@ -82,6 +90,7 @@ const rankingLinks = [
   { href: "/rankings/worst", label: "Needs Review", kind: "worst" },
   { href: "/rankings/most-installed", label: "Most Installed", kind: "most-installed" },
   { href: "/rankings/most-downloaded", label: "Most Downloaded", kind: "most-downloaded" },
+  { href: "/rankings/new-popular", label: "New & Popular", kind: "new-popular" },
   { href: "/rankings/most-issues", label: "Most Issues", kind: "most-issues" },
   { href: "/rankings/most-improved", label: "Most Improved", kind: "most-improved" },
   { href: "/rankings/recently-updated", label: "Recently Scanned", kind: "recently-updated" },

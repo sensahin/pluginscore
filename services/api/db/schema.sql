@@ -361,6 +361,25 @@ from (
   union all
 
   select
+    'new-popular'::text as ranking_key,
+    row_number() over (
+      order by
+        coalesce(p.active_installs, 0) desc,
+        p.wporg_added_at desc nulls last,
+        coalesce(p.downloads, 0) desc,
+        coalesce(p.rating, 0) desc,
+        p.slug asc
+    )::integer as rank,
+    p.id as plugin_id,
+    coalesce(p.active_installs, 0)::numeric as sort_value
+  from plugins p
+  where p.wporg_added_at is not null
+    and p.wporg_added_at >= current_date - interval '24 months'
+    and coalesce(p.active_installs, 0) >= 1000
+
+  union all
+
+  select
     'most-issues'::text as ranking_key,
     row_number() over (order by pcs.total_findings desc, p.slug asc)::integer as rank,
     p.id as plugin_id,

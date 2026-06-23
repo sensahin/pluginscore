@@ -16,6 +16,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     "/rankings/worst",
     "/rankings/most-installed",
     "/rankings/most-downloaded",
+    "/rankings/new-popular",
     "/rankings/most-issues",
     "/rankings/most-improved",
     "/rankings/recently-updated",

@@ -37,6 +37,7 @@ type PluginSort =
   | "scanned_desc"
   | "issues_desc"
   | "delta_desc"
+  | "new_popular_desc"
   | "relevance_desc";
 type TagSort = "score_desc" | "installs_desc" | "scanned_desc" | "issues_desc";
 type PluginsPageOptions = {
@@ -477,6 +478,15 @@ function sortSamplePlugins(plugins: PluginDetail[], sort: PluginSort, query?: st
     if (sort === "issues_desc") return b.findings - a.findings;
     if (sort === "installs_desc") return parseCompact(b.activeInstalls) - parseCompact(a.activeInstalls);
     if (sort === "downloads_desc") return parseCompact(b.downloads) - parseCompact(a.downloads);
+    if (sort === "new_popular_desc") {
+      return (
+        parseCompact(b.activeInstalls) - parseCompact(a.activeInstalls) ||
+        (b.addedAt ?? "").localeCompare(a.addedAt ?? "") ||
+        parseCompact(b.downloads) - parseCompact(a.downloads) ||
+        (b.rating ?? 0) - (a.rating ?? 0) ||
+        a.slug.localeCompare(b.slug)
+      );
+    }
     if (sort === "updated_desc") return b.lastUpdated.localeCompare(a.lastUpdated);
     if (sort === "delta_desc") return (b.score - b.previousScore) - (a.score - a.previousScore);
     if (sort === "scanned_desc") return auditCompletedAt(b).localeCompare(auditCompletedAt(a));
@@ -505,7 +515,8 @@ function buildPluginsFallback({
       .filter((plugin) => !tag || plugin.tags?.some((pluginTag) => pluginTag.slug === tag))
       .filter((plugin) => !normalizedAuthor || plugin.author?.toLowerCase() === normalizedAuthor)
       .filter((plugin) => !normalizedIssueCode || plugin.findings > 0)
-      .filter((plugin) => !normalizedIssueFamily || plugin.findings > 0),
+      .filter((plugin) => !normalizedIssueFamily || plugin.findings > 0)
+      .filter((plugin) => sort !== "new_popular_desc" || isSampleNewPopularPlugin(plugin)),
     sort,
     query,
   );
@@ -693,6 +704,15 @@ function parseCompact(value: string) {
   if (normalized.endsWith("k")) return parsed * 1_000;
 
   return parsed;
+}
+
+function isSampleNewPopularPlugin(plugin: PluginSummary) {
+  if (!plugin.addedAt || parseCompact(plugin.activeInstalls) < 1000) return false;
+  const addedAt = new Date(plugin.addedAt);
+  if (Number.isNaN(addedAt.getTime())) return false;
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - 24);
+  return addedAt >= cutoff;
 }
 
 function pluginMatches(plugin: PluginSummary, query: string) {

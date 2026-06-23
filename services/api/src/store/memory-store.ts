@@ -189,7 +189,11 @@ export class MemoryStore implements PluginScoreStore {
     const issueFiltered = options.issueCode || options.issueFamily
       ? filtered.filter((plugin) => plugin.findings > 0 && plugin.latestAudit?.status === "complete")
       : filtered;
-    const sorted = [...issueFiltered].sort((a, b) => {
+    const rankingFiltered =
+      options.sort === "new_popular_desc"
+        ? issueFiltered.filter(isNewPopularPlugin)
+        : issueFiltered;
+    const sorted = [...rankingFiltered].sort((a, b) => {
       if (options.sort === "relevance_desc" && normalizedQuery) {
         return (
           pluginRelevanceRank(a, normalizedQuery) - pluginRelevanceRank(b, normalizedQuery) ||
@@ -200,6 +204,15 @@ export class MemoryStore implements PluginScoreStore {
       if (options.sort === "issues_desc") return b.findings - a.findings || a.slug.localeCompare(b.slug);
       if (options.sort === "installs_desc") return parseDownloads(b.activeInstalls) - parseDownloads(a.activeInstalls) || a.slug.localeCompare(b.slug);
       if (options.sort === "downloads_desc") return parseDownloads(b.downloads) - parseDownloads(a.downloads) || a.slug.localeCompare(b.slug);
+      if (options.sort === "new_popular_desc") {
+        return (
+          parseDownloads(b.activeInstalls) - parseDownloads(a.activeInstalls) ||
+          (b.addedAt ?? "").localeCompare(a.addedAt ?? "") ||
+          parseDownloads(b.downloads) - parseDownloads(a.downloads) ||
+          (b.rating ?? 0) - (a.rating ?? 0) ||
+          a.slug.localeCompare(b.slug)
+        );
+      }
       if (options.sort === "updated_desc") return b.lastUpdated.localeCompare(a.lastUpdated) || a.slug.localeCompare(b.slug);
       if (options.sort === "delta_desc") return scoreDelta(b) - scoreDelta(a) || a.slug.localeCompare(b.slug);
       if (options.sort === "scanned_desc") {
@@ -632,6 +645,15 @@ function parseDownloads(downloads: string) {
   if (normalized.endsWith("k")) return value * 1_000;
 
   return value;
+}
+
+function isNewPopularPlugin(plugin: SamplePlugin) {
+  if (!plugin.addedAt || parseDownloads(plugin.activeInstalls) < 1000) return false;
+  const addedAt = new Date(plugin.addedAt);
+  if (Number.isNaN(addedAt.getTime())) return false;
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - 24);
+  return addedAt >= cutoff;
 }
 
 function normalizeTagSlug(value: string) {

@@ -479,7 +479,12 @@ export class PostgresStore implements PluginScoreStore {
       !authorName &&
       !issueCode &&
       !issueFamily &&
-      (options.sort === "installs_desc" || options.sort === "downloads_desc" || Boolean(options.auditedOnly));
+      (
+        options.sort === "installs_desc" ||
+        options.sort === "downloads_desc" ||
+        options.sort === "new_popular_desc" ||
+        Boolean(options.auditedOnly)
+      );
 
     if (useRankSnapshot) {
       return this.listRankedPlugins(rankingKey, page, perPage);
@@ -489,6 +494,7 @@ export class PostgresStore implements PluginScoreStore {
     const where = this.buildPluginListWhere({
       values,
       auditedOnly: options.auditedOnly ?? false,
+      newPopularOnly: options.sort === "new_popular_desc",
       searchPattern,
       tagSlug,
       authorName,
@@ -561,6 +567,7 @@ export class PostgresStore implements PluginScoreStore {
   private buildPluginListWhere({
     values,
     auditedOnly,
+    newPopularOnly,
     searchPattern,
     tagSlug,
     authorName,
@@ -569,6 +576,7 @@ export class PostgresStore implements PluginScoreStore {
   }: {
     values: unknown[];
     auditedOnly: boolean;
+    newPopularOnly: boolean;
     searchPattern: string | null;
     tagSlug: string | null;
     authorName: string | null;
@@ -577,6 +585,14 @@ export class PostgresStore implements PluginScoreStore {
   }) {
     const where = ["($1::boolean = false or pcs.audit_run_id is not null)"];
     values.push(auditedOnly);
+
+    if (newPopularOnly) {
+      where.push(`
+        p.wporg_added_at is not null
+        and p.wporg_added_at >= current_date - interval '24 months'
+        and coalesce(p.active_installs, 0) >= 1000
+      `);
+    }
 
     if (searchPattern) {
       const searchParam = values.push(searchPattern);
@@ -2043,6 +2059,25 @@ async function refreshPluginRankSnapshots(client: PoolClient) {
       union all
 
       select
+        'new-popular'::text as ranking_key,
+        row_number() over (
+          order by
+            coalesce(p.active_installs, 0) desc,
+            p.wporg_added_at desc nulls last,
+            coalesce(p.downloads, 0) desc,
+            coalesce(p.rating, 0) desc,
+            p.slug asc
+        )::integer as rank,
+        p.id as plugin_id,
+        coalesce(p.active_installs, 0)::numeric as sort_value
+      from plugins p
+      where p.wporg_added_at is not null
+        and p.wporg_added_at >= current_date - interval '24 months'
+        and coalesce(p.active_installs, 0) >= 1000
+
+      union all
+
+      select
         'most-issues'::text as ranking_key,
         row_number() over (order by pcs.total_findings desc, p.slug asc)::integer as rank,
         p.id as plugin_id,
@@ -2282,6 +2317,7 @@ function rankSnapshotKeyForSort(sort: ListPluginsOptions["sort"]) {
     score_asc: "worst",
     downloads_desc: "most-downloaded",
     installs_desc: "most-installed",
+    new_popular_desc: "new-popular",
     scanned_desc: "recently-scanned",
     issues_desc: "most-issues",
     delta_desc: "most-improved",
@@ -2357,6 +2393,13 @@ function pluginListOrderBy(
     score_asc: "coalesce(pcs.score, 0) asc, p.slug asc",
     downloads_desc: "coalesce(p.downloads, 0) desc, p.slug asc",
     installs_desc: "coalesce(p.active_installs, 0) desc, p.slug asc",
+    new_popular_desc: `
+      coalesce(p.active_installs, 0) desc,
+      p.wporg_added_at desc nulls last,
+      coalesce(p.downloads, 0) desc,
+      coalesce(p.rating, 0) desc,
+      p.slug asc
+    `,
     updated_desc: "p.last_updated_at desc nulls last, p.slug asc",
     scanned_desc: "pcs.scanned_at desc nulls last, p.slug asc",
     issues_desc: "coalesce(pcs.total_findings, 0) desc, p.slug asc",
