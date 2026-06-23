@@ -687,13 +687,18 @@ function ExternalConnections({ plugin }: { plugin: PluginDetail }) {
                   No notable third-party domains detected.
                 </p>
               )}
-              {platformReferenceDomains.length ? (
-                <p className="mt-2 text-xs text-muted">
-                  {platformReferenceDomains.length.toLocaleString()} platform/reference{" "}
-                  {platformReferenceDomains.length === 1 ? "domain" : "domains"} hidden
-                </p>
-              ) : null}
             </div>
+
+            {platformReferenceDomains.length ? (
+              <div>
+                <h3 className="text-sm font-semibold">Platform / Reference Domains</h3>
+                <div className="mt-3 divide-y divide-line rounded-md border border-line">
+                  {platformReferenceDomains.map((domain) => (
+                    <DomainRow key={domain.domain} domain={domain} />
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             <div>
               <h3 className="text-sm font-semibold">External Asset Domains</h3>
@@ -850,6 +855,10 @@ function isAdminEndpoint(endpoint: ExternalConnectionEndpointSummary) {
 }
 
 function domainTypeLabel(domain: ExternalConnectionDomainSummary) {
+  if (isPlatformReferenceDomain(domain)) {
+    return "platform/reference";
+  }
+
   if (domain.types.includes("external_asset") && domain.types.includes("outbound_http")) {
     return "asset + outbound";
   }
