@@ -80,6 +80,7 @@ export async function PluginPageView({
             <IssuesToReview plugin={plugin} />
             <ExternalConnections plugin={plugin} />
             <ScoreHistory history={history} plugin={plugin} />
+            <PluginRelationshipMap data={relationshipMap} />
           </div>
 
           <div className="min-w-0 space-y-6 lg:col-start-3">
@@ -98,8 +99,6 @@ export async function PluginPageView({
             />
           </div>
         </section>
-
-        <PluginRelationshipMap data={relationshipMap} />
       </div>
     </AppShell>
   );
