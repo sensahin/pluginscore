@@ -1320,34 +1320,41 @@ function MetaRow({
     return null;
   }
 
+  const title = typeof value === "string" ? value : undefined;
   const content = (
-    <span className="inline-flex min-w-0 items-center gap-1 text-right text-foreground">
-      {icon}
-      <span className="truncate">{value}</span>
-      {href && isExternalHref(href) ? <ExternalLink size={13} aria-hidden="true" /> : null}
+    <span
+      className="inline-flex min-w-0 max-w-full items-center justify-end gap-1 text-right text-foreground"
+      title={title}
+    >
+      {icon ? <span className="shrink-0">{icon}</span> : null}
+      <span className="min-w-0 truncate">{value}</span>
+      {href && isExternalHref(href) ? (
+        <ExternalLink size={13} className="shrink-0" aria-hidden="true" />
+      ) : null}
     </span>
   );
 
   return (
     <div className="flex items-center justify-between gap-3 py-3">
-      <span className="text-muted">{label}</span>
+      <span className="shrink-0 text-muted">{label}</span>
       {href ? (
         isExternalHref(href) ? (
           <a
             href={href}
-            className="min-w-0 hover:text-info"
+            className="min-w-0 max-w-[72%] hover:text-info"
             target="_blank"
             rel="noreferrer"
+            title={title}
           >
             {content}
           </a>
         ) : (
-          <Link href={href} className="min-w-0 hover:text-info">
+          <Link href={href} className="min-w-0 max-w-[72%] hover:text-info" title={title}>
             {content}
           </Link>
         )
       ) : (
-        content
+        <span className="min-w-0 max-w-[72%]">{content}</span>
       )}
     </div>
   );
