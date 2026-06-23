@@ -1,5 +1,7 @@
 import type {
   ExternalConnectionAnalysisSummary,
+  ExternalConnectionDomainSummary,
+  ExternalConnectionEndpointSummary,
   FindingCodeCount,
   PluginDetail,
   PluginScoreHistoryPoint,
@@ -633,15 +635,29 @@ function ExternalConnections({ plugin }: { plugin: PluginDetail }) {
     );
   }
 
-  const visibleDomains = analysis.domains.slice(0, 8);
-  const visibleEndpoints = analysis.endpoints.slice(0, 6);
+  const platformReferenceDomains = analysis.domains.filter(isPlatformReferenceDomain);
+  const surfacedDomains = analysis.domains.filter((domain) => !isPlatformReferenceDomain(domain));
+  const assetDomains = surfacedDomains.filter(isExternalAssetDomain).slice(0, 6);
+  const notableDomains = surfacedDomains.filter((domain) => !isExternalAssetDomain(domain)).slice(0, 6);
+  const publicEndpoints = analysis.endpoints.filter(isPublicEndpoint).slice(0, 6);
+  const adminEndpoints = analysis.endpoints.filter(isAdminEndpoint);
+  const otherEndpoints = analysis.endpoints
+    .filter((endpoint) => !isPublicEndpoint(endpoint) && !isAdminEndpoint(endpoint))
+    .slice(0, 6);
+  const hasCuratedSignals =
+    notableDomains.length ||
+    assetDomains.length ||
+    publicEndpoints.length ||
+    adminEndpoints.length ||
+    otherEndpoints.length ||
+    platformReferenceDomains.length;
 
   return (
     <section className="rounded-md border border-line bg-surface shadow-sm">
       <div className="flex flex-col gap-4 border-b border-line p-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-base font-semibold">External Connections</h2>
-          <p className="mt-1 text-sm text-muted">Detected by static code analysis</p>
+          <p className="mt-1 text-sm text-muted">Potential connections found in static code analysis.</p>
         </div>
         <span className="inline-flex w-fit items-center gap-2 rounded-md border border-line px-3 py-2 text-sm text-muted">
           <Globe2 size={16} aria-hidden="true" />
@@ -655,48 +671,210 @@ function ExternalConnections({ plugin }: { plugin: PluginDetail }) {
         <ConnectionMetric label="Incoming endpoints" value={analysis.totals.incomingEndpoints} />
       </div>
 
-      {visibleDomains.length || visibleEndpoints.length ? (
+      {hasCuratedSignals ? (
         <div className="grid gap-5 p-5 xl:grid-cols-2">
-          {visibleDomains.length ? (
+          <div className="space-y-5">
             <div>
-              <h3 className="text-sm font-semibold">Domains</h3>
-              <div className="mt-3 divide-y divide-line rounded-md border border-line">
-                {visibleDomains.map((domain) => (
-                  <div key={domain.domain} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-                    <span className="min-w-0 truncate font-mono">{domain.domain}</span>
-                    <span className="shrink-0 text-xs text-muted">
-                      {domain.count.toLocaleString()} · {domain.confidence}
-                    </span>
-                  </div>
-                ))}
-              </div>
+              <h3 className="text-sm font-semibold">Notable Domains</h3>
+              {notableDomains.length ? (
+                <div className="mt-3 divide-y divide-line rounded-md border border-line">
+                  {notableDomains.map((domain) => (
+                    <DomainRow key={domain.domain} domain={domain} />
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-3 rounded-md border border-line px-3 py-2 text-sm text-muted">
+                  No notable third-party domains detected.
+                </p>
+              )}
+              {platformReferenceDomains.length ? (
+                <p className="mt-2 text-xs text-muted">
+                  {platformReferenceDomains.length.toLocaleString()} platform/reference{" "}
+                  {platformReferenceDomains.length === 1 ? "domain" : "domains"} hidden
+                </p>
+              ) : null}
             </div>
-          ) : null}
 
-          {visibleEndpoints.length ? (
             <div>
-              <h3 className="text-sm font-semibold">Incoming Endpoints</h3>
-              <div className="mt-3 divide-y divide-line rounded-md border border-line">
-                {visibleEndpoints.map((endpoint) => (
-                  <div key={endpoint.endpoint} className="px-3 py-2 text-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="min-w-0 break-all font-mono text-xs">{endpoint.endpoint}</span>
-                      <span className="shrink-0 rounded-md bg-surface-subtle px-2 py-1 text-xs text-muted">
-                        {endpoint.exposure}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-xs text-muted">{endpoint.source}</p>
-                  </div>
-                ))}
-              </div>
+              <h3 className="text-sm font-semibold">External Asset Domains</h3>
+              {assetDomains.length ? (
+                <div className="mt-3 divide-y divide-line rounded-md border border-line">
+                  {assetDomains.map((domain) => (
+                    <DomainRow key={domain.domain} domain={domain} />
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-3 rounded-md border border-line px-3 py-2 text-sm text-muted">
+                  No external asset domains detected.
+                </p>
+              )}
             </div>
-          ) : null}
+          </div>
+
+          <div>
+            <h3 className="text-sm font-semibold">Incoming Endpoints</h3>
+            <div className="mt-3 space-y-3">
+              {publicEndpoints.length ? (
+                <EndpointList endpoints={publicEndpoints} />
+              ) : (
+                <p className="rounded-md border border-line px-3 py-2 text-sm text-muted">
+                  No public endpoints detected.
+                </p>
+              )}
+
+              {adminEndpoints.length ? (
+                <details className="rounded-md border border-line">
+                  <summary className="cursor-pointer px-3 py-2 text-sm font-medium">
+                    Admin AJAX endpoints
+                    <span className="ml-2 font-mono text-xs text-muted">
+                      {adminEndpoints.length.toLocaleString()}
+                    </span>
+                  </summary>
+                  <div className="divide-y divide-line border-t border-line">
+                    {adminEndpoints.slice(0, 12).map((endpoint) => (
+                      <EndpointRow key={endpoint.endpoint} endpoint={endpoint} />
+                    ))}
+                  </div>
+                  {adminEndpoints.length > 12 ? (
+                    <p className="border-t border-line px-3 py-2 text-xs text-muted">
+                      {(adminEndpoints.length - 12).toLocaleString()} more hidden
+                    </p>
+                  ) : null}
+                </details>
+              ) : null}
+
+              {otherEndpoints.length ? (
+                <div>
+                  <p className="mb-2 text-xs font-medium uppercase text-muted">Other endpoints</p>
+                  <EndpointList endpoints={otherEndpoints} />
+                </div>
+              ) : null}
+            </div>
+          </div>
         </div>
       ) : (
         <p className="p-5 text-sm text-muted">No external domains or incoming endpoints detected.</p>
       )}
     </section>
   );
+}
+
+function DomainRow({ domain }: { domain: ExternalConnectionDomainSummary }) {
+  return (
+    <div className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+      <span className="min-w-0 truncate font-mono">{domain.domain}</span>
+      <span className="shrink-0 text-xs text-muted">
+        {domain.count.toLocaleString()} · {domainTypeLabel(domain)}
+      </span>
+    </div>
+  );
+}
+
+function EndpointList({ endpoints }: { endpoints: ExternalConnectionEndpointSummary[] }) {
+  return (
+    <div className="divide-y divide-line rounded-md border border-line">
+      {endpoints.map((endpoint) => (
+        <EndpointRow key={endpoint.endpoint} endpoint={endpoint} />
+      ))}
+    </div>
+  );
+}
+
+function EndpointRow({ endpoint }: { endpoint: ExternalConnectionEndpointSummary }) {
+  return (
+    <div className="px-3 py-2 text-sm">
+      <div className="flex items-center justify-between gap-3">
+        <span className="min-w-0 break-all font-mono text-xs">{endpoint.endpoint}</span>
+        <span className="shrink-0 rounded-md bg-surface-subtle px-2 py-1 text-xs text-muted">
+          {endpointExposureLabel(endpoint)}
+        </span>
+      </div>
+      <p className="mt-1 text-xs text-muted">{endpoint.source}</p>
+    </div>
+  );
+}
+
+function isPlatformReferenceDomain(domain: ExternalConnectionDomainSummary) {
+  const value = normalizeConnectionDomain(domain.domain);
+
+  return (
+    value === "wordpress.org" ||
+    value.endsWith(".wordpress.org") ||
+    value === "w.org" ||
+    value.endsWith(".w.org") ||
+    value === "w3.org" ||
+    value.endsWith(".w3.org") ||
+    value === "schema.org" ||
+    value.endsWith(".schema.org") ||
+    value === "gnu.org" ||
+    value.endsWith(".gnu.org") ||
+    value === "fsf.org" ||
+    value.endsWith(".fsf.org") ||
+    value === "opensource.org" ||
+    value.endsWith(".opensource.org") ||
+    (value === "github.com" && domain.confidence === "low")
+  );
+}
+
+function isExternalAssetDomain(domain: ExternalConnectionDomainSummary) {
+  return domain.types.includes("external_asset");
+}
+
+function isPublicEndpoint(endpoint: ExternalConnectionEndpointSummary) {
+  const value = endpoint.endpoint.toLowerCase();
+  const source = endpoint.source.toLowerCase();
+
+  return (
+    endpoint.exposure === "public" ||
+    value.includes("_nopriv_") ||
+    value.startsWith("/wp-json/") ||
+    source === "register_rest_route"
+  );
+}
+
+function isAdminEndpoint(endpoint: ExternalConnectionEndpointSummary) {
+  if (isPublicEndpoint(endpoint)) {
+    return false;
+  }
+
+  const value = endpoint.endpoint.toLowerCase();
+  const source = endpoint.source.toLowerCase();
+
+  return (
+    endpoint.exposure === "authenticated" ||
+    source === "wp_ajax" ||
+    source === "admin_post" ||
+    value.startsWith("wp_ajax_") ||
+    value.startsWith("admin_post_")
+  );
+}
+
+function domainTypeLabel(domain: ExternalConnectionDomainSummary) {
+  if (domain.types.includes("external_asset") && domain.types.includes("outbound_http")) {
+    return "asset + outbound";
+  }
+
+  if (domain.types.includes("external_asset")) {
+    return "asset";
+  }
+
+  if (domain.types.includes("outbound_http")) {
+    return "outbound";
+  }
+
+  return domain.confidence;
+}
+
+function endpointExposureLabel(endpoint: ExternalConnectionEndpointSummary) {
+  if (endpoint.source === "register_rest_route" && endpoint.exposure === "unknown") {
+    return "REST";
+  }
+
+  return endpoint.exposure;
+}
+
+function normalizeConnectionDomain(domain: string) {
+  return domain.toLowerCase().replace(/^www\./, "");
 }
 
 function ConnectionMetric({ label, value }: { label: string; value: number }) {
