@@ -19,7 +19,7 @@ export function PluginListTable({
   return (
     <div className="min-w-0 overflow-hidden rounded-md border border-line bg-surface shadow-sm">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[860px] border-collapse text-sm">
+        <table className="w-full min-w-[960px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-line text-left text-xs text-muted">
               {showRank ? <th className="w-20 px-4 py-3 font-medium">Rank</th> : null}
@@ -28,6 +28,7 @@ export function PluginListTable({
               <th className="px-4 py-3 text-right font-medium">Errors</th>
               <th className="px-4 py-3 text-right font-medium">Warnings</th>
               <th className="px-4 py-3 text-right font-medium">Installs</th>
+              <th className="px-4 py-3 text-right font-medium">Added</th>
               <th className="px-4 py-3 text-right font-medium">Updated</th>
               <th className="px-4 py-3 font-medium">Top Issue</th>
             </tr>
@@ -89,7 +90,10 @@ export function PluginListTable({
                   <td className="px-4 py-4 text-right font-mono">
                     {plugin.activeInstalls}
                   </td>
-                  <td className="px-4 py-4 text-right text-xs text-muted">
+                  <td className="whitespace-nowrap px-4 py-4 text-right text-xs text-muted">
+                    <RelativeDate value={plugin.addedAt} fallback="-" />
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-4 text-right text-xs text-muted">
                     <RelativeDate value={plugin.lastUpdated} />
                   </td>
                   <td className="max-w-[28ch] truncate px-4 py-4 text-muted">
@@ -100,7 +104,7 @@ export function PluginListTable({
             ) : (
               <tr>
                 <td
-                  colSpan={showRank ? 8 : 7}
+                  colSpan={showRank ? 9 : 8}
                   className="h-24 px-4 py-8 text-center text-muted"
                 >
                   {emptyLabel}
