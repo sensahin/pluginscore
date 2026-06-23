@@ -3,6 +3,8 @@ import type {
   AuditFindingsRetentionSummary,
   AuthorDetail,
   AuthorSummary,
+  ExternalConnectionAnalysisMode,
+  ExternalConnectionOperations,
   IssueSummary,
   OperationsSummary,
   PaginatedResult,
@@ -105,11 +107,18 @@ export type EnqueueJobInput = WordPressPluginMetadata & {
   force?: boolean;
 };
 
+export type ExternalConnectionSettingsInput = {
+  mode: ExternalConnectionAnalysisMode;
+  sampleRemaining?: number;
+};
+
 export interface PluginScoreStore {
   health(): Promise<{ ok: true; mode: "memory" | "postgres" }>;
   stats(): Promise<ApiStats>;
   auditFindingsRetention(): Promise<AuditFindingsRetentionSummary>;
   operationsSummary(): Promise<OperationsSummary>;
+  externalConnectionOperations(): Promise<ExternalConnectionOperations>;
+  updateExternalConnectionSettings(input: ExternalConnectionSettingsInput): Promise<ExternalConnectionOperations>;
   listPlugins(options: ListPluginsOptions): Promise<PaginatedResult<PluginSummary>>;
   getPlugin(slug: string): Promise<PluginDetail | null>;
   getPluginHistory(slug: string, options: GetPluginHistoryOptions): Promise<PluginScoreHistory | null>;

@@ -3,6 +3,10 @@ import type {
   AuditFindingsRetentionSummary,
   AuthorDetail,
   AuthorSummary,
+  ExternalConnectionAnalysisMode,
+  ExternalConnectionAnalysisSummary,
+  ExternalConnectionOperations,
+  ExternalConnectionSettings,
   IssueSummary,
   PaginatedResult,
   AuditRunSummary,
@@ -41,6 +45,7 @@ import {
 import { Pool, type PoolClient } from "pg";
 import type {
   EnqueueJobInput,
+  ExternalConnectionSettingsInput,
   ListAuthorsOptions,
   ListQueueOptions,
   ListPluginReportsOptions,
@@ -61,6 +66,7 @@ export class PostgresStore implements PluginScoreStore {
   private scanRetryBackoffSeconds: number;
   private scanTerminalTimeoutAttempts: number;
   private pluginCheckVersion: string;
+  private externalConnectionAnalysisDisabled: boolean;
 
   constructor(databaseUrl: string, options: StoreOptions = {}) {
     this.pool = new Pool({ connectionString: databaseUrl });
@@ -69,6 +75,7 @@ export class PostgresStore implements PluginScoreStore {
     this.scanRetryBackoffSeconds = options.scanRetryBackoffSeconds ?? 21_600;
     this.scanTerminalTimeoutAttempts = options.scanTerminalTimeoutAttempts ?? 2;
     this.pluginCheckVersion = options.pluginCheckVersion ?? "unknown";
+    this.externalConnectionAnalysisDisabled = options.externalConnectionAnalysisDisabled ?? false;
   }
 
   async health() {
@@ -462,6 +469,81 @@ export class PostgresStore implements PluginScoreStore {
     };
   }
 
+  async externalConnectionOperations(): Promise<ExternalConnectionOperations> {
+    const [settings, statsResult, recentResult] = await Promise.all([
+      this.getExternalConnectionSettings(),
+      this.pool.query(`
+        select
+          count(*)::integer as analyzed_plugins,
+          count(*) filter (where status = 'complete')::integer as complete,
+          count(*) filter (where status = 'failed')::integer as failed,
+          count(*) filter (where status = 'skipped')::integer as skipped,
+          count(*) filter (where status = 'timeout')::integer as timeout,
+          coalesce(sum(domain_count), 0)::integer as domains_detected,
+          coalesce(sum(incoming_endpoint_count), 0)::integer as incoming_endpoints_detected,
+          avg(duration_ms)::numeric as average_duration_ms,
+          max(analyzed_at) as last_analyzed_at
+        from external_connection_analyses
+      `),
+      this.pool.query(`
+        select
+          p.slug as plugin,
+          p.name,
+          eca.plugin_version as version,
+          eca.status,
+          eca.analyzed_at,
+          eca.duration_ms,
+          eca.domain_count,
+          eca.incoming_endpoint_count,
+          left(coalesce(eca.error_message, ''), 240) as error_message
+        from external_connection_analyses eca
+        join plugins p on p.id = eca.plugin_id
+        order by eca.analyzed_at desc
+        limit 10
+      `),
+    ]);
+    const statsRow = statsResult.rows[0] ?? {};
+
+    return {
+      settings,
+      stats: {
+        analyzedPlugins: Number(statsRow.analyzed_plugins ?? 0),
+        complete: Number(statsRow.complete ?? 0),
+        failed: Number(statsRow.failed ?? 0),
+        skipped: Number(statsRow.skipped ?? 0),
+        timeout: Number(statsRow.timeout ?? 0),
+        domainsDetected: Number(statsRow.domains_detected ?? 0),
+        incomingEndpointsDetected: Number(statsRow.incoming_endpoints_detected ?? 0),
+        averageDurationMs: optionalRoundedNumber(statsRow.average_duration_ms),
+        lastAnalyzedAt: optionalIsoDate(statsRow.last_analyzed_at),
+      },
+      recent: recentResult.rows.map(rowToExternalConnectionRecent),
+    };
+  }
+
+  async updateExternalConnectionSettings(input: ExternalConnectionSettingsInput): Promise<ExternalConnectionOperations> {
+    const sampleRemaining = input.mode === "sample"
+      ? Math.max(0, input.sampleRemaining ?? 25)
+      : 0;
+
+    await this.pool.query(
+      `
+      insert into app_settings (key, value, updated_at)
+      values (
+        'external_connection_analysis',
+        jsonb_build_object('mode', $1::text, 'sampleRemaining', $2::integer),
+        now()
+      )
+      on conflict (key) do update set
+        value = excluded.value,
+        updated_at = now()
+      `,
+      [input.mode, sampleRemaining],
+    );
+
+    return this.externalConnectionOperations();
+  }
+
   async listPlugins(options: ListPluginsOptions): Promise<PaginatedResult<PluginSummary>> {
     const page = Math.max(1, options.page);
     const perPage = Math.max(1, options.perPage);
@@ -688,15 +770,31 @@ export class PostgresStore implements PluginScoreStore {
 
     const auditRunId = optionalNumber(row.audit_run_id);
     if (auditRunId) {
-      const [audit, topFindings] = await Promise.all([
+      const [audit, topFindings, externalConnections] = await Promise.all([
         this.getAuditRunSummary(auditRunId),
         this.getTopFindingCounts(auditRunId),
+        this.getExternalConnectionAnalysis(Number(row.id)),
       ]);
       plugin.latestAudit = audit ?? undefined;
       plugin.topFindings = topFindings;
+      plugin.externalConnections = externalConnections ?? undefined;
     }
 
     return plugin;
+  }
+
+  private async getExternalConnectionAnalysis(pluginId: number): Promise<ExternalConnectionAnalysisSummary | null> {
+    const result = await this.pool.query(
+      `
+      select summary_json
+      from external_connection_analyses
+      where plugin_id = $1
+      limit 1
+      `,
+      [pluginId],
+    );
+
+    return rowToExternalConnectionAnalysis(result.rows[0]?.summary_json);
   }
 
   async getPluginHistory(slug: string, options: GetPluginHistoryOptions): Promise<PluginScoreHistory | null> {
@@ -1455,8 +1553,75 @@ export class PostgresStore implements PluginScoreStore {
         `,
       );
 
-      return result.rows[0] ?? null;
+      const job = result.rows[0] ?? null;
+
+      if (!job) {
+        return null;
+      }
+
+      job.externalConnectionAnalysis = await this.reserveExternalConnectionAnalysis(client);
+
+      return job;
     });
+  }
+
+  private async reserveExternalConnectionAnalysis(client: PoolClient): Promise<ScanJobDto["externalConnectionAnalysis"]> {
+    if (this.externalConnectionAnalysisDisabled) {
+      return { enabled: false, mode: "off" };
+    }
+
+    const settings = await this.getExternalConnectionSettings(client);
+
+    if (settings.mode === "off") {
+      return { enabled: false, mode: "off" };
+    }
+
+    if (settings.mode === "new_scans") {
+      return { enabled: true, mode: "new_scans" };
+    }
+
+    if (settings.sampleRemaining <= 0) {
+      return { enabled: false, mode: "sample" };
+    }
+
+    await client.query(
+      `
+      update app_settings
+      set
+        value = jsonb_set(
+          value,
+          '{sampleRemaining}',
+          to_jsonb(greatest(coalesce((value->>'sampleRemaining')::integer, 0) - 1, 0))
+        ),
+        updated_at = now()
+      where key = 'external_connection_analysis'
+      `,
+    );
+
+    return { enabled: true, mode: "sample" };
+  }
+
+  private async getExternalConnectionSettings(client?: PoolClient): Promise<ExternalConnectionSettings> {
+    const queryable = client ?? this.pool;
+    const result = await queryable.query(
+      `
+      select value, updated_at
+      from app_settings
+      where key = 'external_connection_analysis'
+      limit 1
+      `,
+    );
+    const row = result.rows[0];
+    const value = row?.value;
+    const record = value && typeof value === "object" ? value as Record<string, unknown> : {};
+    const mode = parseExternalConnectionMode(record.mode);
+
+    return {
+      mode,
+      sampleRemaining: Math.max(0, Number(record.sampleRemaining ?? 0)),
+      updatedAt: optionalIsoDate(row?.updated_at),
+      envDisabled: this.externalConnectionAnalysisDisabled,
+    };
   }
 
   private async recoverStaleRunningJobs(client: PoolClient) {
@@ -1553,6 +1718,15 @@ export class PostgresStore implements PluginScoreStore {
       const auditRunId = runResult.rows[0]?.id;
       if (!auditRunId) {
         throw new Error("Unable to create audit run");
+      }
+
+      if (payload.externalConnections) {
+        await upsertExternalConnectionAnalysis(
+          client,
+          job.plugin_id,
+          auditRunId,
+          payload.externalConnections,
+        );
       }
 
       for (const finding of payload.findings) {
@@ -1992,6 +2166,71 @@ async function pruneStaleAuditFindingsForPlugin(client: PoolClient, pluginId: nu
       and af.audit_run_id <> pcs.audit_run_id
     `,
     [pluginId],
+  );
+}
+
+async function upsertExternalConnectionAnalysis(
+  client: PoolClient,
+  pluginId: number,
+  auditRunId: number,
+  analysis: ExternalConnectionAnalysisSummary,
+) {
+  await client.query(
+    `
+    insert into external_connection_analyses (
+      plugin_id, audit_run_id, plugin_version, analysis_version,
+      status, duration_ms, error_message, files_scanned, bytes_scanned,
+      domain_count, outbound_call_count, external_asset_count,
+      incoming_endpoint_count, high_confidence_count, medium_confidence_count,
+      low_confidence_count, summary_json, analyzed_at, updated_at
+    )
+    values (
+      $1, $2, $3, $4,
+      $5, $6, $7, $8, $9,
+      $10, $11, $12,
+      $13, $14, $15,
+      $16, $17::jsonb, $18::timestamptz, now()
+    )
+    on conflict (plugin_id) do update set
+      audit_run_id = excluded.audit_run_id,
+      plugin_version = excluded.plugin_version,
+      analysis_version = excluded.analysis_version,
+      status = excluded.status,
+      duration_ms = excluded.duration_ms,
+      error_message = excluded.error_message,
+      files_scanned = excluded.files_scanned,
+      bytes_scanned = excluded.bytes_scanned,
+      domain_count = excluded.domain_count,
+      outbound_call_count = excluded.outbound_call_count,
+      external_asset_count = excluded.external_asset_count,
+      incoming_endpoint_count = excluded.incoming_endpoint_count,
+      high_confidence_count = excluded.high_confidence_count,
+      medium_confidence_count = excluded.medium_confidence_count,
+      low_confidence_count = excluded.low_confidence_count,
+      summary_json = excluded.summary_json,
+      analyzed_at = excluded.analyzed_at,
+      updated_at = now()
+    `,
+    [
+      pluginId,
+      auditRunId,
+      analysis.pluginVersion,
+      analysis.analysisVersion,
+      analysis.status,
+      analysis.durationMs ?? null,
+      analysis.errorMessage ?? null,
+      analysis.filesScanned,
+      analysis.bytesScanned,
+      analysis.totals.domains,
+      analysis.totals.outboundCalls,
+      analysis.totals.externalAssets,
+      analysis.totals.incomingEndpoints,
+      analysis.totals.highConfidence,
+      analysis.totals.mediumConfidence,
+      analysis.totals.lowConfidence,
+      JSON.stringify(analysis),
+      analysis.analyzedAt,
+    ],
   );
 }
 
@@ -2569,6 +2808,70 @@ function rowToOperationsUserSubmission(row: Record<string, unknown>): Operations
   };
 }
 
+function rowToExternalConnectionRecent(row: Record<string, unknown>): ExternalConnectionOperations["recent"][number] {
+  const rawStatus = String(row.status);
+  const status: ExternalConnectionOperations["recent"][number]["status"] =
+    rawStatus === "skipped" || rawStatus === "failed" || rawStatus === "timeout"
+      ? rawStatus
+      : "complete";
+
+  return {
+    plugin: String(row.plugin),
+    name: String(row.name),
+    version: String(row.version),
+    status,
+    analyzedAt: optionalIsoDate(row.analyzed_at) ?? new Date().toISOString(),
+    durationMs: optionalRoundedNumber(row.duration_ms),
+    domains: Number(row.domain_count ?? 0),
+    incomingEndpoints: Number(row.incoming_endpoint_count ?? 0),
+    errorMessage: optionalString(row.error_message),
+  };
+}
+
+function rowToExternalConnectionAnalysis(value: unknown): ExternalConnectionAnalysisSummary | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Partial<ExternalConnectionAnalysisSummary>;
+  if (
+    !record.status ||
+    !record.analysisVersion ||
+    !record.pluginVersion ||
+    !record.analyzedAt ||
+    !record.totals ||
+    !Array.isArray(record.domains) ||
+    !Array.isArray(record.endpoints) ||
+    !Array.isArray(record.findings)
+  ) {
+    return null;
+  }
+
+  return {
+    status: record.status,
+    analysisVersion: record.analysisVersion,
+    pluginVersion: record.pluginVersion,
+    analyzedAt: record.analyzedAt,
+    durationMs: record.durationMs,
+    errorMessage: record.errorMessage,
+    filesScanned: Number(record.filesScanned ?? 0),
+    bytesScanned: Number(record.bytesScanned ?? 0),
+    totals: {
+      domains: Number(record.totals.domains ?? 0),
+      outboundCalls: Number(record.totals.outboundCalls ?? 0),
+      externalAssets: Number(record.totals.externalAssets ?? 0),
+      incomingEndpoints: Number(record.totals.incomingEndpoints ?? 0),
+      findings: Number(record.totals.findings ?? 0),
+      highConfidence: Number(record.totals.highConfidence ?? 0),
+      mediumConfidence: Number(record.totals.mediumConfidence ?? 0),
+      lowConfidence: Number(record.totals.lowConfidence ?? 0),
+    },
+    domains: record.domains,
+    endpoints: record.endpoints,
+    findings: record.findings,
+  };
+}
+
 function rowToAuditFindingsRetentionSummary(
   row: Record<string, unknown>,
 ): AuditFindingsRetentionSummary {
@@ -2838,6 +3141,10 @@ function parseFilterDate(value?: string) {
 
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
+}
+
+function parseExternalConnectionMode(value: unknown): ExternalConnectionAnalysisMode {
+  return value === "new_scans" || value === "sample" ? value : "off";
 }
 
 function rowToIssueSummary(row: Record<string, unknown>): IssueSummary {

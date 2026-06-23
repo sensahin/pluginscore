@@ -16,6 +16,7 @@ export type ApiConfig = {
   scanRetryBackoffSeconds: number;
   scanTerminalTimeoutAttempts: number;
   pluginCheckVersion: string;
+  externalConnectionAnalysisDisabled: boolean;
 };
 
 export function getConfig(): ApiConfig {
@@ -35,6 +36,7 @@ export function getConfig(): ApiConfig {
     scanRetryBackoffSeconds: Number.parseInt(process.env.SCAN_RETRY_BACKOFF_SECONDS ?? "21600", 10),
     scanTerminalTimeoutAttempts: Number.parseInt(process.env.SCAN_TERMINAL_TIMEOUT_ATTEMPTS ?? "2", 10),
     pluginCheckVersion: process.env.PLUGIN_CHECK_VERSION ?? "unknown",
+    externalConnectionAnalysisDisabled: process.env.EXTERNAL_CONNECTION_ANALYSIS_DISABLED === "true",
   };
 }
 

@@ -154,6 +154,39 @@ create index if not exists plugin_reports_plugin_created_idx
 create index if not exists plugin_reports_type_created_idx
   on plugin_reports(report_type, created_at desc, id desc);
 
+create table if not exists app_settings (
+  key text primary key,
+  value jsonb not null,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists external_connection_analyses (
+  plugin_id bigint primary key references plugins(id) on delete cascade,
+  audit_run_id bigint references audit_runs(id) on delete set null,
+  plugin_version text not null,
+  analysis_version text not null,
+  status text not null check (status in ('complete', 'skipped', 'failed', 'timeout')),
+  duration_ms integer,
+  error_message text,
+  files_scanned integer not null default 0,
+  bytes_scanned bigint not null default 0,
+  domain_count integer not null default 0,
+  outbound_call_count integer not null default 0,
+  external_asset_count integer not null default 0,
+  incoming_endpoint_count integer not null default 0,
+  high_confidence_count integer not null default 0,
+  medium_confidence_count integer not null default 0,
+  low_confidence_count integer not null default 0,
+  summary_json jsonb not null default '{}'::jsonb,
+  analyzed_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists external_connection_analyses_status_idx
+  on external_connection_analyses(status, analyzed_at desc);
+create index if not exists external_connection_analyses_analyzed_idx
+  on external_connection_analyses(analyzed_at desc);
+
 create table if not exists audit_findings (
   id bigserial primary key,
   audit_run_id bigint not null references audit_runs(id) on delete cascade,

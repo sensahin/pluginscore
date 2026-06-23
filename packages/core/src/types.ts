@@ -106,11 +106,75 @@ export type PluginRankings = {
   tags: PluginTagRanking[];
 };
 
+export type ExternalConnectionAnalysisMode = "off" | "new_scans" | "sample";
+
+export type ExternalConnectionAnalysisStatus = "complete" | "skipped" | "failed" | "timeout";
+
+export type ExternalConnectionConfidence = "high" | "medium" | "low";
+
+export type ExternalConnectionType =
+  | "outbound_http"
+  | "external_asset"
+  | "incoming_endpoint";
+
+export type ExternalConnectionFinding = {
+  type: ExternalConnectionType;
+  confidence: ExternalConnectionConfidence;
+  source: string;
+  filePath?: string;
+  line?: number;
+  url?: string;
+  domain?: string;
+  endpoint?: string;
+  method?: string;
+};
+
+export type ExternalConnectionDomainSummary = {
+  domain: string;
+  types: ExternalConnectionType[];
+  confidence: ExternalConnectionConfidence;
+  count: number;
+  sampleUrls: string[];
+};
+
+export type ExternalConnectionEndpointSummary = {
+  endpoint: string;
+  source: string;
+  exposure: "public" | "authenticated" | "unknown";
+  count: number;
+  sampleFiles: string[];
+};
+
+export type ExternalConnectionAnalysisSummary = {
+  status: ExternalConnectionAnalysisStatus;
+  analysisVersion: string;
+  pluginVersion: string;
+  analyzedAt: string;
+  durationMs?: number;
+  errorMessage?: string;
+  filesScanned: number;
+  bytesScanned: number;
+  totals: {
+    domains: number;
+    outboundCalls: number;
+    externalAssets: number;
+    incomingEndpoints: number;
+    findings: number;
+    highConfidence: number;
+    mediumConfidence: number;
+    lowConfidence: number;
+  };
+  domains: ExternalConnectionDomainSummary[];
+  endpoints: ExternalConnectionEndpointSummary[];
+  findings: ExternalConnectionFinding[];
+};
+
 export type PluginDetail = PluginSummary & {
   scores?: ScoreBreakdown;
   rankings?: PluginRankings;
   latestAudit?: AuditRunSummary;
   topFindings?: FindingCodeCount[];
+  externalConnections?: ExternalConnectionAnalysisSummary;
 };
 
 export type PluginSearchSummary = PluginSummary & {
@@ -304,6 +368,39 @@ export type OperationsSummary = {
   recentCompleted: OperationsRecentScan[];
 };
 
+export type ExternalConnectionSettings = {
+  mode: ExternalConnectionAnalysisMode;
+  sampleRemaining: number;
+  updatedAt?: string;
+  envDisabled?: boolean;
+};
+
+export type ExternalConnectionOperations = {
+  settings: ExternalConnectionSettings;
+  stats: {
+    analyzedPlugins: number;
+    complete: number;
+    failed: number;
+    skipped: number;
+    timeout: number;
+    domainsDetected: number;
+    incomingEndpointsDetected: number;
+    averageDurationMs?: number;
+    lastAnalyzedAt?: string;
+  };
+  recent: Array<{
+    plugin: string;
+    name: string;
+    version: string;
+    status: ExternalConnectionAnalysisStatus;
+    analyzedAt: string;
+    durationMs?: number;
+    domains: number;
+    incomingEndpoints: number;
+    errorMessage?: string;
+  }>;
+};
+
 export type TrackedPluginSummary = {
   slug: string;
   version?: string;
@@ -443,6 +540,10 @@ export type ScanJobDto = {
   reason: string;
   downloadUrl: string;
   attempts: number;
+  externalConnectionAnalysis?: {
+    enabled: boolean;
+    mode: ExternalConnectionAnalysisMode;
+  };
 };
 
 export type NormalizedFinding = {
@@ -468,6 +569,7 @@ export type ScanCompletePayload = {
   rawReport?: unknown;
   stderr?: string;
   findings: NormalizedFinding[];
+  externalConnections?: ExternalConnectionAnalysisSummary;
 };
 
 export type ScanFailPayload = {

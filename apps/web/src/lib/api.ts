@@ -3,6 +3,8 @@ import type {
   AuditFindingsRetentionSummary,
   AuthorDetail,
   AuthorSummary,
+  ExternalConnectionAnalysisMode,
+  ExternalConnectionOperations,
   IssueSummary,
   OperationsSummary,
   PaginatedResult,
@@ -254,6 +256,48 @@ export async function getOperationsSummary() {
       },
     },
   );
+}
+
+export async function getExternalConnectionOperations() {
+  if (!internalApiToken) {
+    return null;
+  }
+
+  return fetchFromApi<ExternalConnectionOperations | null>(
+    "/maintenance/external-connections",
+    null,
+    {
+      cache: "no-store",
+      headers: {
+        authorization: `Bearer ${internalApiToken}`,
+      },
+    },
+  );
+}
+
+export async function updateExternalConnectionSettings(input: {
+  mode: ExternalConnectionAnalysisMode;
+  sampleRemaining?: number;
+}) {
+  if (!apiBaseUrl || !internalApiToken) {
+    throw new Error("Internal API is not configured.");
+  }
+
+  const response = await fetch(new URL("/maintenance/external-connections", apiBaseUrl), {
+    method: "PATCH",
+    headers: {
+      authorization: `Bearer ${internalApiToken}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(input),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`External connection setting update failed: ${response.status}`);
+  }
+
+  return (await response.json()) as ExternalConnectionOperations;
 }
 
 export async function getPluginReports({

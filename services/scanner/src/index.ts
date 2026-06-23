@@ -7,6 +7,10 @@ import {
   extractZip,
   prepareJobDirectory,
 } from "./files.js";
+import {
+  analyzeExternalConnections,
+  externalConnectionFailureSummary,
+} from "./external-connections.js";
 import { runPluginCheck, ScanCommandError } from "./plugin-check.js";
 import { fetchPopularPlugins } from "@pluginscore/wporg";
 
@@ -88,6 +92,11 @@ async function scanOnce() {
       },
       config,
     );
+    const externalConnections = await maybeAnalyzeExternalConnections(
+      extracted.pluginDir,
+      job.targetVersion,
+      job.externalConnectionAnalysis?.enabled === true,
+    );
 
     await api.completeJob(job.id, {
       pluginVersion: job.targetVersion,
@@ -100,6 +109,7 @@ async function scanOnce() {
       rawReport: result.rawReport,
       stderr: result.stderr,
       findings: result.findings,
+      externalConnections,
     });
 
     console.log(`Completed ${job.slug}: ${result.findings.length} findings.`);
@@ -128,4 +138,28 @@ async function scanOnce() {
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function maybeAnalyzeExternalConnections(
+  pluginDir: string,
+  pluginVersion: string,
+  enabled: boolean,
+) {
+  if (!enabled) {
+    return undefined;
+  }
+
+  const startedAt = Date.now();
+
+  try {
+    return await analyzeExternalConnections(pluginDir, pluginVersion, {
+      timeoutMs: config.externalConnectionAnalysisTimeoutMs,
+    });
+  } catch (error) {
+    return externalConnectionFailureSummary(
+      pluginVersion,
+      error,
+      Date.now() - startedAt,
+    );
+  }
 }

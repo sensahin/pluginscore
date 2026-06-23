@@ -3,6 +3,8 @@ import type {
   AuditFindingsRetentionSummary,
   AuthorDetail,
   AuthorSummary,
+  ExternalConnectionOperations,
+  ExternalConnectionSettings,
   OperationsSummary,
   PaginatedResult,
   PluginReport,
@@ -21,6 +23,7 @@ import type {
 import { findIssue, findPlugin, issues, plugins, queue as sampleQueue } from "@pluginscore/core/sample-data";
 import type {
   EnqueueJobInput,
+  ExternalConnectionSettingsInput,
   ListPluginReportsOptions,
   ListQueueOptions,
   ListAuthorsOptions,
@@ -58,6 +61,12 @@ export class MemoryStore implements PluginScoreStore {
   private completedAudits: CompletedAudit[] = [];
   private searchEvents: SearchEvent[] = [];
   private reports: PluginReport[] = [];
+  private externalConnectionSettings: ExternalConnectionSettings = {
+    mode: "off",
+    sampleRemaining: 0,
+    updatedAt: new Date().toISOString(),
+    envDisabled: false,
+  };
   private nextJobId = 1;
   private nextReportId = 1;
 
@@ -173,6 +182,33 @@ export class MemoryStore implements PluginScoreStore {
       },
       recentCompleted: [],
     };
+  }
+
+  async externalConnectionOperations(): Promise<ExternalConnectionOperations> {
+    return {
+      settings: this.externalConnectionSettings,
+      stats: {
+        analyzedPlugins: 0,
+        complete: 0,
+        failed: 0,
+        skipped: 0,
+        timeout: 0,
+        domainsDetected: 0,
+        incomingEndpointsDetected: 0,
+      },
+      recent: [],
+    };
+  }
+
+  async updateExternalConnectionSettings(input: ExternalConnectionSettingsInput): Promise<ExternalConnectionOperations> {
+    this.externalConnectionSettings = {
+      mode: input.mode,
+      sampleRemaining: input.mode === "sample" ? Math.max(0, input.sampleRemaining ?? 25) : 0,
+      updatedAt: new Date().toISOString(),
+      envDisabled: false,
+    };
+
+    return this.externalConnectionOperations();
   }
 
   async listPlugins(options: ListPluginsOptions): Promise<PaginatedResult<SamplePlugin>> {
@@ -567,6 +603,8 @@ export class MemoryStore implements PluginScoreStore {
     job.status = "running";
     job.attempts += 1;
 
+    const decision = this.reserveExternalConnectionAnalysis();
+
     return {
       id: job.id,
       pluginId: job.pluginId,
@@ -576,7 +614,30 @@ export class MemoryStore implements PluginScoreStore {
       reason: job.reason,
       downloadUrl: job.downloadUrl,
       attempts: job.attempts,
+      externalConnectionAnalysis: decision,
     };
+  }
+
+  private reserveExternalConnectionAnalysis(): ScanJobDto["externalConnectionAnalysis"] {
+    if (this.externalConnectionSettings.envDisabled || this.externalConnectionSettings.mode === "off") {
+      return { enabled: false, mode: "off" };
+    }
+
+    if (this.externalConnectionSettings.mode === "new_scans") {
+      return { enabled: true, mode: "new_scans" };
+    }
+
+    if (this.externalConnectionSettings.sampleRemaining <= 0) {
+      return { enabled: false, mode: "sample" };
+    }
+
+    this.externalConnectionSettings = {
+      ...this.externalConnectionSettings,
+      sampleRemaining: Math.max(0, this.externalConnectionSettings.sampleRemaining - 1),
+      updatedAt: new Date().toISOString(),
+    };
+
+    return { enabled: true, mode: "sample" };
   }
 
   async completeJob(id: number, _payload: ScanCompletePayload) {

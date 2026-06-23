@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Clock3,
   Database,
+  Globe2,
   Gauge,
   HardDrive,
   History,
@@ -16,6 +17,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import {
   getAuditFindingsRetention,
+  getExternalConnectionOperations,
   getFreshStats,
   getHealth,
   getOperationsSummary,
@@ -34,13 +36,14 @@ export const metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
-  const [health, stats, queueJobs, retention, operations, reportStats] = await Promise.all([
+  const [health, stats, queueJobs, retention, operations, reportStats, externalConnections] = await Promise.all([
     getHealth(),
     getFreshStats(),
     getQueue(20),
     getAuditFindingsRetention(),
     getOperationsSummary(),
     getPluginReportStats(),
+    getExternalConnectionOperations(),
   ]);
   const metrics = [
     { label: "Indexed plugins", value: stats.indexedPlugins.toLocaleString(), detail: "metadata rows" },
@@ -108,6 +111,36 @@ export default async function AdminPage() {
           label: "Failed",
           value: operations.userSubmissions.failed.toLocaleString(),
           detail: `${operations.userSubmissions.cancelled.toLocaleString()} cancelled`,
+        },
+      ]
+    : [];
+  const externalConnectionMetrics = externalConnections
+    ? [
+        {
+          label: "Mode",
+          value: externalConnectionModeLabel(externalConnections.settings.mode),
+          detail: externalConnections.settings.envDisabled
+            ? "disabled by server env"
+            : externalConnections.settings.mode === "sample"
+              ? `${externalConnections.settings.sampleRemaining.toLocaleString()} sample scans left`
+              : "admin controlled",
+        },
+        {
+          label: "Analyzed",
+          value: externalConnections.stats.analyzedPlugins.toLocaleString(),
+          detail: `${externalConnections.stats.complete.toLocaleString()} complete, ${externalConnections.stats.failed.toLocaleString()} failed`,
+        },
+        {
+          label: "Domains",
+          value: externalConnections.stats.domainsDetected.toLocaleString(),
+          detail: `${externalConnections.stats.incomingEndpointsDetected.toLocaleString()} incoming endpoints`,
+        },
+        {
+          label: "Average time",
+          value: formatDuration(externalConnections.stats.averageDurationMs),
+          detail: externalConnections.stats.lastAnalyzedAt
+            ? `last ${formatDateTime(externalConnections.stats.lastAnalyzedAt)}`
+            : "not analyzed yet",
         },
       ]
     : [];
@@ -190,6 +223,108 @@ export default async function AdminPage() {
               <MetricCard key={metric.label} {...metric} />
             ))}
           </div>
+        </section>
+      ) : null}
+
+      {externalConnections ? (
+        <section className="rounded-md border border-line bg-surface">
+          <div className="flex flex-col gap-4 border-b border-line p-5 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex items-start gap-3">
+              <span className="mt-1 flex size-10 shrink-0 items-center justify-center rounded-md border border-line bg-background text-muted">
+                <Globe2 size={18} aria-hidden="true" />
+              </span>
+              <div>
+                <p className="text-sm font-medium text-brand">Experimental</p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-normal">
+                  External Connections
+                </h2>
+              </div>
+            </div>
+            <form
+              action="/admin/external-connections"
+              method="post"
+              className="grid gap-3 sm:grid-cols-[minmax(0,12rem)_8rem_auto]"
+            >
+              <label className="grid gap-1 text-xs font-medium uppercase text-muted">
+                Mode
+                <select
+                  name="mode"
+                  defaultValue={externalConnections.settings.mode}
+                  className="h-10 rounded-md border border-line bg-background px-3 text-sm normal-case text-foreground"
+                >
+                  <option value="off">Off</option>
+                  <option value="new_scans">New scans</option>
+                  <option value="sample">Sample</option>
+                </select>
+              </label>
+              <label className="grid gap-1 text-xs font-medium uppercase text-muted">
+                Sample
+                <input
+                  name="sampleRemaining"
+                  type="number"
+                  min="0"
+                  max="1000"
+                  defaultValue={externalConnections.settings.mode === "sample" ? externalConnections.settings.sampleRemaining : 25}
+                  className="h-10 rounded-md border border-line bg-background px-3 text-sm normal-case text-foreground"
+                />
+              </label>
+              <button
+                type="submit"
+                className="inline-flex h-10 items-center justify-center self-end rounded-md border border-line px-3 text-sm font-semibold transition hover:bg-surface-subtle"
+              >
+                Save
+              </button>
+            </form>
+          </div>
+          <div className="grid gap-3 border-b border-line p-5 sm:grid-cols-2 xl:grid-cols-4">
+            {externalConnectionMetrics.map((metric) => (
+              <MetricCard key={metric.label} {...metric} />
+            ))}
+          </div>
+          {externalConnections.recent.length ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px] border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-line text-left text-xs uppercase text-muted">
+                    <th className="px-5 py-3 font-semibold">Plugin</th>
+                    <th className="px-5 py-3 font-semibold">Status</th>
+                    <th className="px-5 py-3 text-right font-semibold">Domains</th>
+                    <th className="px-5 py-3 text-right font-semibold">Endpoints</th>
+                    <th className="px-5 py-3 text-right font-semibold">Duration</th>
+                    <th className="px-5 py-3 font-semibold">Analyzed</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {externalConnections.recent.map((item) => (
+                    <tr key={`${item.plugin}-${item.analyzedAt}`} className="border-b border-line">
+                      <td className="px-5 py-4">
+                        <Link
+                          href={`/plugins/${item.plugin}`}
+                          className="block truncate font-medium hover:text-brand"
+                        >
+                          {item.name}
+                        </Link>
+                        <span className="mt-1 block font-mono text-xs text-muted">{item.plugin}</span>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className={`rounded-md px-2 py-1 text-xs font-semibold ${connectionStatusClass(item.status)}`}>
+                          {item.status}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 text-right font-mono">{item.domains.toLocaleString()}</td>
+                      <td className="px-5 py-4 text-right font-mono">{item.incomingEndpoints.toLocaleString()}</td>
+                      <td className="px-5 py-4 text-right font-mono">{formatDuration(item.durationMs)}</td>
+                      <td className="px-5 py-4 text-muted">{formatDateTime(item.analyzedAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="p-5 text-sm text-muted">
+              No external connection analyses have been stored yet.
+            </p>
+          )}
         </section>
       ) : null}
 
@@ -584,6 +719,30 @@ function formatDateTime(value?: string) {
 function formatVersionCounts(versions: Array<{ version: string; count: number }>) {
   const [first] = versions;
   return first ? `${first.version} (${first.count.toLocaleString()})` : "n/a";
+}
+
+function externalConnectionModeLabel(mode: string) {
+  if (mode === "new_scans") {
+    return "New scans";
+  }
+
+  if (mode === "sample") {
+    return "Sample";
+  }
+
+  return "Off";
+}
+
+function connectionStatusClass(status: string) {
+  if (status === "failed" || status === "timeout") {
+    return "bg-risk/10 text-risk";
+  }
+
+  if (status === "complete") {
+    return "bg-good/10 text-good";
+  }
+
+  return "bg-surface-subtle text-muted";
 }
 
 function submissionStatusClass(status: string) {

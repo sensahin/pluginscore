@@ -8,6 +8,7 @@ export type StoreOptions = {
   scanRetryBackoffSeconds?: number;
   scanTerminalTimeoutAttempts?: number;
   pluginCheckVersion?: string;
+  externalConnectionAnalysisDisabled?: boolean;
 };
 
 export function createStore(databaseUrl?: string, options: StoreOptions = {}): PluginScoreStore {

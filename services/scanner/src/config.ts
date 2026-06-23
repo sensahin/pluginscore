@@ -11,6 +11,7 @@ export type ScannerConfig = {
   tmpDir: string;
   pluginCheckCommand?: string;
   pluginCheckVersion: string;
+  externalConnectionAnalysisTimeoutMs: number;
 };
 
 export function getConfig(): ScannerConfig {
@@ -23,5 +24,9 @@ export function getConfig(): ScannerConfig {
     tmpDir: process.env.SCAN_TMP_DIR ?? join(tmpdir(), "pluginscore-scans"),
     pluginCheckCommand: process.env.PLUGIN_CHECK_COMMAND,
     pluginCheckVersion: process.env.PLUGIN_CHECK_VERSION ?? "unknown",
+    externalConnectionAnalysisTimeoutMs: Number.parseInt(
+      process.env.EXTERNAL_CONNECTION_ANALYSIS_TIMEOUT_SECONDS ?? "15",
+      10,
+    ) * 1000,
   };
 }

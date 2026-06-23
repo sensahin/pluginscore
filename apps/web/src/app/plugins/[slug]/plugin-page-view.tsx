@@ -1,4 +1,9 @@
-import type { FindingCodeCount, PluginDetail, PluginScoreHistoryPoint } from "@pluginscore/core";
+import type {
+  ExternalConnectionAnalysisSummary,
+  FindingCodeCount,
+  PluginDetail,
+  PluginScoreHistoryPoint,
+} from "@pluginscore/core";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import {
@@ -9,6 +14,7 @@ import {
   Clock3,
   Download,
   ExternalLink,
+  Globe2,
   Package,
   Star,
   User,
@@ -57,6 +63,7 @@ export async function PluginPageView({
         <section className={`${pluginPageGridClass} items-start`}>
           <div className="min-w-0 space-y-6 lg:col-span-2">
             <IssuesToReview plugin={plugin} />
+            <ExternalConnections plugin={plugin} />
             <ScoreHistory history={history} plugin={plugin} />
           </div>
 
@@ -590,6 +597,131 @@ function IssueMeta({ label, value }: { label: string; value: string }) {
       <dd className="mt-1 break-words font-medium text-foreground">{value}</dd>
     </div>
   );
+}
+
+function ExternalConnections({ plugin }: { plugin: PluginDetail }) {
+  const analysis = plugin.externalConnections;
+
+  if (!analysis) {
+    return (
+      <section className="rounded-md border border-line bg-surface shadow-sm">
+        <div className="flex items-center justify-between gap-4 p-5">
+          <div>
+            <h2 className="text-base font-semibold">External Connections</h2>
+            <p className="mt-1 text-sm text-muted">Not analyzed yet.</p>
+          </div>
+          <Globe2 size={28} className="text-muted" aria-hidden="true" />
+        </div>
+      </section>
+    );
+  }
+
+  if (analysis.status !== "complete") {
+    return (
+      <section className="rounded-md border border-line bg-surface shadow-sm">
+        <div className="flex items-center justify-between gap-4 border-b border-line p-5">
+          <div>
+            <h2 className="text-base font-semibold">External Connections</h2>
+            <p className="mt-1 text-sm text-muted">{connectionStatusLabel(analysis.status)}</p>
+          </div>
+          <AlertTriangle size={28} className="text-warn" aria-hidden="true" />
+        </div>
+        {analysis.errorMessage ? (
+          <p className="break-words p-5 text-sm text-muted">{analysis.errorMessage}</p>
+        ) : null}
+      </section>
+    );
+  }
+
+  const visibleDomains = analysis.domains.slice(0, 8);
+  const visibleEndpoints = analysis.endpoints.slice(0, 6);
+
+  return (
+    <section className="rounded-md border border-line bg-surface shadow-sm">
+      <div className="flex flex-col gap-4 border-b border-line p-5 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-base font-semibold">External Connections</h2>
+          <p className="mt-1 text-sm text-muted">Detected by static code analysis</p>
+        </div>
+        <span className="inline-flex w-fit items-center gap-2 rounded-md border border-line px-3 py-2 text-sm text-muted">
+          <Globe2 size={16} aria-hidden="true" />
+          {analysis.totals.domains.toLocaleString()} domains
+        </span>
+      </div>
+
+      <div className="grid gap-3 border-b border-line p-5 sm:grid-cols-3">
+        <ConnectionMetric label="Outbound calls" value={analysis.totals.outboundCalls} />
+        <ConnectionMetric label="External assets" value={analysis.totals.externalAssets} />
+        <ConnectionMetric label="Incoming endpoints" value={analysis.totals.incomingEndpoints} />
+      </div>
+
+      {visibleDomains.length || visibleEndpoints.length ? (
+        <div className="grid gap-5 p-5 xl:grid-cols-2">
+          {visibleDomains.length ? (
+            <div>
+              <h3 className="text-sm font-semibold">Domains</h3>
+              <div className="mt-3 divide-y divide-line rounded-md border border-line">
+                {visibleDomains.map((domain) => (
+                  <div key={domain.domain} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                    <span className="min-w-0 truncate font-mono">{domain.domain}</span>
+                    <span className="shrink-0 text-xs text-muted">
+                      {domain.count.toLocaleString()} · {domain.confidence}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {visibleEndpoints.length ? (
+            <div>
+              <h3 className="text-sm font-semibold">Incoming Endpoints</h3>
+              <div className="mt-3 divide-y divide-line rounded-md border border-line">
+                {visibleEndpoints.map((endpoint) => (
+                  <div key={endpoint.endpoint} className="px-3 py-2 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="min-w-0 break-all font-mono text-xs">{endpoint.endpoint}</span>
+                      <span className="shrink-0 rounded-md bg-surface-subtle px-2 py-1 text-xs text-muted">
+                        {endpoint.exposure}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-muted">{endpoint.source}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <p className="p-5 text-sm text-muted">No external domains or incoming endpoints detected.</p>
+      )}
+    </section>
+  );
+}
+
+function ConnectionMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-md border border-line bg-background p-4">
+      <p className="text-xs font-medium uppercase text-muted">{label}</p>
+      <p className="mt-2 font-mono text-2xl font-semibold">{value.toLocaleString()}</p>
+    </div>
+  );
+}
+
+function connectionStatusLabel(status: ExternalConnectionAnalysisSummary["status"]) {
+  if (status === "failed") {
+    return "Analysis failed";
+  }
+
+  if (status === "timeout") {
+    return "Analysis timed out";
+  }
+
+  if (status === "skipped") {
+    return "Analysis skipped";
+  }
+
+  return "Analyzed";
 }
 
 function ScoreHistory({

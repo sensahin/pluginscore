@@ -133,6 +133,13 @@ const updatePluginReportBody = z.object({
   ),
 });
 
+const externalConnectionModeSchema = z.enum(["off", "new_scans", "sample"]);
+
+const updateExternalConnectionSettingsBody = z.object({
+  mode: externalConnectionModeSchema,
+  sampleRemaining: z.coerce.number().int().min(0).max(1000).optional(),
+});
+
 const optionalText = z.preprocess(
   (value) => (typeof value === "string" && value.trim() ? value : undefined),
   z.string().optional(),
@@ -187,6 +194,60 @@ const findingSchema = z.object({
   docsUrl: z.string().url().optional(),
 });
 
+const externalConnectionTypeSchema = z.enum([
+  "outbound_http",
+  "external_asset",
+  "incoming_endpoint",
+]);
+
+const externalConnectionFindingSchema = z.object({
+  type: externalConnectionTypeSchema,
+  confidence: z.enum(["high", "medium", "low"]),
+  source: z.string().min(1).max(120),
+  filePath: z.string().max(500).optional(),
+  line: z.number().int().positive().optional(),
+  url: z.string().url().max(2000).optional(),
+  domain: z.string().max(255).optional(),
+  endpoint: z.string().max(500).optional(),
+  method: z.string().max(40).optional(),
+});
+
+const externalConnectionAnalysisSchema = z.object({
+  status: z.enum(["complete", "skipped", "failed", "timeout"]),
+  analysisVersion: z.string().min(1).max(80),
+  pluginVersion: z.string().min(1).max(120),
+  analyzedAt: z.string().datetime(),
+  durationMs: z.number().int().nonnegative().optional(),
+  errorMessage: z.string().max(1000).optional(),
+  filesScanned: z.number().int().nonnegative().max(100000),
+  bytesScanned: z.number().int().nonnegative(),
+  totals: z.object({
+    domains: z.number().int().nonnegative().max(10000),
+    outboundCalls: z.number().int().nonnegative().max(100000),
+    externalAssets: z.number().int().nonnegative().max(100000),
+    incomingEndpoints: z.number().int().nonnegative().max(100000),
+    findings: z.number().int().nonnegative().max(100000),
+    highConfidence: z.number().int().nonnegative().max(100000),
+    mediumConfidence: z.number().int().nonnegative().max(100000),
+    lowConfidence: z.number().int().nonnegative().max(100000),
+  }),
+  domains: z.array(z.object({
+    domain: z.string().min(1).max(255),
+    types: z.array(externalConnectionTypeSchema).max(3),
+    confidence: z.enum(["high", "medium", "low"]),
+    count: z.number().int().nonnegative(),
+    sampleUrls: z.array(z.string().url().max(2000)).max(5),
+  })).max(100),
+  endpoints: z.array(z.object({
+    endpoint: z.string().min(1).max(500),
+    source: z.string().min(1).max(120),
+    exposure: z.enum(["public", "authenticated", "unknown"]),
+    count: z.number().int().nonnegative(),
+    sampleFiles: z.array(z.string().max(500)).max(5),
+  })).max(100),
+  findings: z.array(externalConnectionFindingSchema).max(300),
+});
+
 const completeJobBody = z.object({
   pluginVersion: z.string().min(1),
   pluginCheckVersion: z.string().min(1),
@@ -199,6 +260,7 @@ const completeJobBody = z.object({
   rawReport: z.unknown().optional(),
   stderr: z.string().optional(),
   findings: z.array(findingSchema),
+  externalConnections: externalConnectionAnalysisSchema.optional(),
 });
 
 const failJobBody = z.object({
@@ -260,6 +322,24 @@ export async function createServer(config: ApiConfig, store: PluginScoreStore) {
     "/maintenance/operations",
     { preHandler: requireInternalAuth },
     async () => store.operationsSummary(),
+  );
+
+  app.get(
+    "/maintenance/external-connections",
+    { preHandler: requireInternalAuth },
+    async () => store.externalConnectionOperations(),
+  );
+
+  app.patch(
+    "/maintenance/external-connections",
+    { preHandler: requireInternalAuth },
+    async (request) => {
+      const body = updateExternalConnectionSettingsBody.parse(request.body);
+      return store.updateExternalConnectionSettings({
+        mode: body.mode,
+        sampleRemaining: body.sampleRemaining,
+      });
+    },
   );
 
   app.get("/plugins", async (request) => {
