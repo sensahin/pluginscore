@@ -1,9 +1,11 @@
 import type {
+  AuthorDetail,
   ExternalConnectionAnalysisSummary,
   ExternalConnectionDomainSummary,
   FindingCodeCount,
   PluginDetail,
   PluginSummary,
+  ScoreBand,
 } from "@pluginscore/core";
 
 export type RelationshipNodeType =
@@ -21,6 +23,7 @@ export type PluginRelationshipNode = {
   href: string;
   external?: boolean;
   metric?: string;
+  band?: ScoreBand;
   size: number;
 };
 
@@ -36,6 +39,7 @@ export type PluginRelationshipMapData = {
   nodes: PluginRelationshipNode[];
   edges: PluginRelationshipEdge[];
   stats: {
+    plugins: number;
     tags: number;
     issues: number;
     domains: number;
@@ -56,6 +60,8 @@ export type RelationshipIssuePluginGroup = {
 
 const MAX_GRAPH_NODES = 48;
 const MAX_GRAPH_EDGES = 90;
+const MAX_AUTHOR_PLUGIN_NODES = 24;
+const MAX_AUTHOR_TAG_NODES = 12;
 
 export function buildPluginRelationshipMap(
   plugin: PluginDetail,
@@ -197,6 +203,110 @@ export function buildPluginRelationshipMap(
         edge.source !== edge.target,
     ),
     stats: {
+      plugins: nodeList.filter((node) => node.type === "plugin").length,
+      tags: nodeList.filter((node) => node.type === "tag").length,
+      issues: nodeList.filter((node) => node.type === "issue").length,
+      domains: nodeList.filter((node) => node.type === "domain").length,
+      relatedPlugins: nodeList.filter((node) => node.type === "relatedPlugin").length,
+    },
+  };
+}
+
+export function buildAuthorRelationshipMap(
+  author: Pick<AuthorDetail, "name" | "plugins">,
+): PluginRelationshipMapData {
+  const nodes = new Map<string, PluginRelationshipNode>();
+  const edges = new Map<string, PluginRelationshipEdge>();
+  const plugins = uniquePluginSummaries(author.plugins)
+    .sort((a, b) => pluginPopularity(b) - pluginPopularity(a) || a.name.localeCompare(b.name));
+  const centerNodeId = relationshipId("author", author.name);
+
+  addNode(nodes, {
+    id: centerNodeId,
+    type: "author",
+    label: author.name,
+    href: `/authors/${encodeURIComponent(author.name)}`,
+    metric: `${plugins.length.toLocaleString()} plugin${plugins.length === 1 ? "" : "s"}`,
+    size: 54,
+  });
+
+  if (plugins.length < 2) {
+    return relationshipMapResult(centerNodeId, nodes, edges);
+  }
+
+  const selectedPlugins = plugins.slice(0, MAX_AUTHOR_PLUGIN_NODES);
+  const tagSummaries = sharedAuthorTags(selectedPlugins).slice(0, MAX_AUTHOR_TAG_NODES);
+  const tagNodeIds = new Map<string, string>();
+
+  for (const plugin of selectedPlugins) {
+    const nodeId = relationshipId("plugin", plugin.slug);
+    if (addNode(nodes, {
+      id: nodeId,
+      type: "plugin",
+      label: plugin.name,
+      href: `/plugins/${encodeURIComponent(plugin.slug)}`,
+      metric: `${plugin.score} score`,
+      band: plugin.band,
+      size: authorPluginNodeSize(plugin),
+    })) {
+      addEdge(edges, centerNodeId, nodeId, "plugin");
+    }
+  }
+
+  for (const tag of tagSummaries) {
+    const nodeId = relationshipId("tag", tag.slug);
+    tagNodeIds.set(tag.slug, nodeId);
+    if (addNode(nodes, {
+      id: nodeId,
+      type: "tag",
+      label: tag.name,
+      href: `/tags/${encodeURIComponent(tag.slug)}`,
+      metric: `${tag.pluginCount.toLocaleString()} plugins`,
+      size: 28 + Math.min(10, tag.pluginCount * 2),
+    })) {
+      addEdge(edges, centerNodeId, nodeId, "category");
+    }
+  }
+
+  for (const plugin of selectedPlugins) {
+    const pluginNodeId = relationshipId("plugin", plugin.slug);
+    let tagEdges = 0;
+
+    for (const tag of plugin.tags ?? []) {
+      const tagNodeId = tagNodeIds.get(tag.slug);
+      if (!tagNodeId) {
+        continue;
+      }
+
+      addEdge(edges, pluginNodeId, tagNodeId, "category");
+      tagEdges += 1;
+      if (tagEdges >= 3) {
+        break;
+      }
+    }
+  }
+
+  return relationshipMapResult(centerNodeId, nodes, edges);
+}
+
+function relationshipMapResult(
+  centerNodeId: string,
+  nodes: Map<string, PluginRelationshipNode>,
+  edges: Map<string, PluginRelationshipEdge>,
+): PluginRelationshipMapData {
+  const nodeList = [...nodes.values()];
+
+  return {
+    centerNodeId,
+    nodes: nodeList,
+    edges: [...edges.values()].filter(
+      (edge) =>
+        nodes.has(edge.source) &&
+        nodes.has(edge.target) &&
+        edge.source !== edge.target,
+    ),
+    stats: {
+      plugins: nodeList.filter((node) => node.type === "plugin").length,
       tags: nodeList.filter((node) => node.type === "tag").length,
       issues: nodeList.filter((node) => node.type === "issue").length,
       domains: nodeList.filter((node) => node.type === "domain").length,
@@ -303,6 +413,44 @@ function graphDomains(analysis?: ExternalConnectionAnalysisSummary) {
   return [...assetDomains, ...outboundDomains, ...fallbackDomains];
 }
 
+function sharedAuthorTags(plugins: PluginSummary[]) {
+  const bySlug = new Map<string, {
+    slug: string;
+    name: string;
+    pluginCount: number;
+    activeInstalls: number;
+  }>();
+
+  for (const plugin of plugins) {
+    const seenInPlugin = new Set<string>();
+
+    for (const tag of plugin.tags ?? []) {
+      if (seenInPlugin.has(tag.slug)) {
+        continue;
+      }
+
+      const existing = bySlug.get(tag.slug) ?? {
+        slug: tag.slug,
+        name: tag.name,
+        pluginCount: 0,
+        activeInstalls: 0,
+      };
+      existing.pluginCount += 1;
+      existing.activeInstalls += pluginPopularity(plugin);
+      bySlug.set(tag.slug, existing);
+      seenInPlugin.add(tag.slug);
+    }
+  }
+
+  return [...bySlug.values()]
+    .filter((tag) => tag.pluginCount >= 2)
+    .sort((a, b) =>
+      b.pluginCount - a.pluginCount ||
+      b.activeInstalls - a.activeInstalls ||
+      a.name.localeCompare(b.name),
+    );
+}
+
 function isPlatformReferenceDomain(domain: ExternalConnectionDomainSummary) {
   const value = domain.domain.toLowerCase().replace(/^www\./, "");
 
@@ -333,6 +481,10 @@ function pluginNodeSize(plugin: Pick<PluginSummary, "score" | "activeInstalls">,
   return Math.round(base + scoreSize + installSize);
 }
 
+function authorPluginNodeSize(plugin: Pick<PluginSummary, "activeInstalls">) {
+  return Math.round(26 + Math.min(20, Math.log10(pluginPopularity(plugin) + 10) * 3.2));
+}
+
 function pluginPopularity(plugin: Pick<PluginSummary, "activeInstalls">) {
   const normalized = plugin.activeInstalls.toLowerCase().replace("+", "");
   const parsed = Number.parseFloat(normalized);
@@ -350,6 +502,18 @@ function pluginPopularity(plugin: Pick<PluginSummary, "activeInstalls">) {
   }
 
   return parsed;
+}
+
+function uniquePluginSummaries(plugins: PluginSummary[]) {
+  const bySlug = new Map<string, PluginSummary>();
+
+  for (const plugin of plugins) {
+    if (!bySlug.has(plugin.slug)) {
+      bySlug.set(plugin.slug, plugin);
+    }
+  }
+
+  return [...bySlug.values()];
 }
 
 function relationshipId(prefix: string, value: string) {

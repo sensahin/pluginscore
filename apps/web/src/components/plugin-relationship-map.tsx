@@ -30,8 +30,16 @@ const nodeTypeLabels: Record<RelationshipNodeType, string> = {
 
 export function PluginRelationshipMap({
   data,
+  title = "Relationship Map",
+  description = "Author, categories, issues, domains, and nearby plugins.",
+  linksLabel = "Relationship links",
+  sectionId = "relationship-map",
 }: {
   data: PluginRelationshipMapData;
+  title?: string;
+  description?: string;
+  linksLabel?: string;
+  sectionId?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
@@ -108,13 +116,11 @@ export function PluginRelationshipMap({
   }
 
   return (
-    <section id="relationship-map" className="rounded-md border border-line bg-surface shadow-sm">
+    <section id={sectionId} className="rounded-md border border-line bg-surface shadow-sm">
       <div className="flex flex-col gap-4 border-b border-line p-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-base font-semibold">Relationship Map</h2>
-          <p className="mt-1 text-sm text-muted">
-            Author, categories, issues, domains, and nearby plugins.
-          </p>
+          <h2 className="text-base font-semibold">{title}</h2>
+          <p className="mt-1 text-sm text-muted">{description}</p>
         </div>
         <span className="inline-flex w-fit rounded-md border border-line px-3 py-2 font-mono text-sm text-muted">
           {data.nodes.length.toLocaleString()} nodes
@@ -130,10 +136,10 @@ export function PluginRelationshipMap({
             </div>
           ) : null}
         </div>
-        <GraphLegend />
+        <GraphLegend nodes={data.nodes} />
         <details className="mt-4 rounded-md border border-line bg-background">
           <summary className="cursor-pointer px-3 py-2 text-sm font-medium">
-            Relationship links
+            {linksLabel}
           </summary>
           <div className="border-t border-line p-3">
             <RelationshipLinkList data={data} />
@@ -157,6 +163,8 @@ function buildCytoscapeElements(data: PluginRelationshipMapData) {
         id: node.id,
         label: compactLabel(node.label, node.type === "plugin" ? 34 : 24),
         type: node.type,
+        band: node.band ?? "",
+        center: node.id === data.centerNodeId ? "true" : "false",
         href: node.href,
         external: Boolean(node.external),
         metric: node.metric ?? nodeTypeLabels[node.type],
@@ -189,16 +197,23 @@ function positionNodes(data: PluginRelationshipMapData): PositionedNode[] {
     radius: number;
     start: number;
     end: number;
-  }> = [
-    { type: "author", radius: 135, start: -98, end: -82 },
-    { type: "tag", radius: 190, start: -180, end: -22 },
-    { type: "issue", radius: 225, start: 10, end: 128 },
-    { type: "domain", radius: 245, start: 138, end: 220 },
-    { type: "relatedPlugin", radius: 295, start: 228, end: 350 },
-  ];
+  }> = center?.type === "author"
+    ? [
+        { type: "plugin", radius: 190, start: -172, end: 172 },
+        { type: "tag", radius: 300, start: 190, end: 530 },
+      ]
+    : [
+        { type: "author", radius: 135, start: -98, end: -82 },
+        { type: "tag", radius: 190, start: -180, end: -22 },
+        { type: "issue", radius: 225, start: 10, end: 128 },
+        { type: "domain", radius: 245, start: 138, end: 220 },
+        { type: "relatedPlugin", radius: 295, start: 228, end: 350 },
+      ];
 
   for (const group of groups) {
-    const nodes = data.nodes.filter((node) => node.type === group.type);
+    const nodes = data.nodes.filter(
+      (node) => node.type === group.type && node.id !== data.centerNodeId,
+    );
     const count = nodes.length;
 
     nodes.forEach((node, index) => {
@@ -248,11 +263,39 @@ function relationshipGraphStyle(colors: ReturnType<typeof graphColors>): Stylesh
       style: {
         "background-color": colors.brand,
         "border-color": colors.brandStrong,
-        "border-width": 4,
+        "border-width": 2,
         color: colors.foreground,
         "font-size": 13,
         "font-weight": 700,
         "text-max-width": 140,
+      },
+    },
+    {
+      selector: 'node[type = "plugin"][band = "excellent"]',
+      style: {
+        "background-color": colors.good,
+        "border-color": colors.good,
+      },
+    },
+    {
+      selector: 'node[type = "plugin"][band = "good"]',
+      style: {
+        "background-color": colors.brand,
+        "border-color": colors.brand,
+      },
+    },
+    {
+      selector: 'node[type = "plugin"][band = "watch"]',
+      style: {
+        "background-color": colors.warn,
+        "border-color": colors.warn,
+      },
+    },
+    {
+      selector: 'node[type = "plugin"][band = "risk"]',
+      style: {
+        "background-color": colors.risk,
+        "border-color": colors.risk,
       },
     },
     {
@@ -304,6 +347,16 @@ function relationshipGraphStyle(colors: ReturnType<typeof graphColors>): Stylesh
         "border-width": 3,
       },
     },
+    {
+      selector: 'node[center = "true"]',
+      style: {
+        "border-color": colors.brandStrong,
+        "border-width": 4,
+        "font-size": 13,
+        "font-weight": 700,
+        "text-max-width": 140,
+      },
+    },
   ] as unknown as StylesheetJson;
 }
 
@@ -327,8 +380,9 @@ function graphColors() {
   };
 }
 
-function GraphLegend() {
-  const entries: Array<{ type: RelationshipNodeType; label: string }> = [
+function GraphLegend({ nodes }: { nodes: PluginRelationshipNode[] }) {
+  const visibleTypes = new Set(nodes.map((node) => node.type));
+  const allEntries: Array<{ type: RelationshipNodeType; label: string }> = [
     { type: "plugin", label: "Plugin" },
     { type: "author", label: "Author" },
     { type: "tag", label: "Category" },
@@ -336,6 +390,7 @@ function GraphLegend() {
     { type: "domain", label: "Domain" },
     { type: "relatedPlugin", label: "Related" },
   ];
+  const entries = allEntries.filter((entry) => visibleTypes.has(entry.type));
 
   return (
     <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted">
@@ -408,7 +463,7 @@ function groupNodesForList(nodes: PluginRelationshipNode[]) {
 }
 
 function legendDotClass(type: RelationshipNodeType) {
-  if (type === "plugin") return "bg-brand";
+  if (type === "plugin") return "bg-brand ring-1 ring-good/60";
   if (type === "author") return "bg-info";
   if (type === "tag") return "bg-good";
   if (type === "issue") return "bg-warn";

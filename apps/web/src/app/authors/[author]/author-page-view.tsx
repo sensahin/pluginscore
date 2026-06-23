@@ -6,11 +6,13 @@ import type { ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
 import { PaginationControls } from "@/components/pagination-controls";
 import { PluginListTable } from "@/components/plugin-list-table";
+import { PluginRelationshipMap } from "@/components/plugin-relationship-map";
 import { getAuthor, getAuthors, getPluginsPage } from "@/lib/api";
 import {
   PLUGIN_DIRECTORY_PER_PAGE,
   titleWithPage,
 } from "@/lib/pagination";
+import { buildAuthorRelationshipMap } from "@/lib/plugin-relationship-map";
 import { seoMetadata } from "@/lib/seo";
 
 export const authorSorts = {
@@ -181,6 +183,7 @@ export async function AuthorPageView({
     author: detail.name,
   });
   const rankOffset = (plugins.page - 1) * plugins.perPage;
+  const authorRelationshipMap = buildAuthorRelationshipMap(detail);
 
   const structuredData = {
     "@context": "https://schema.org",
@@ -315,6 +318,14 @@ export async function AuthorPageView({
           hrefForPage={(targetPage) => authorSortPath(detail.name, sort, targetPage)}
         />
       </section>
+
+      <PluginRelationshipMap
+        data={authorRelationshipMap}
+        title="Author Ecosystem"
+        description="Plugins from this author and the shared categories connecting them."
+        linksLabel="Ecosystem links"
+        sectionId="author-ecosystem"
+      />
     </AppShell>
   );
 }
