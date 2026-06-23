@@ -550,7 +550,7 @@ function paginateFallback<T>(items: T[], page: number, perPage: number): Paginat
 function sampleTags(limit: number, minimumPlugins: number): TagSummary[] {
   return buildSampleTagSummaries()
     .filter((tag) => tag.pluginCount >= minimumPlugins)
-    .sort((a, b) => b.pluginCount - a.pluginCount || b.activeInstalls - a.activeInstalls || a.name.localeCompare(b.name))
+    .sort((a, b) => b.activeInstalls - a.activeInstalls || b.pluginCount - a.pluginCount || a.name.localeCompare(b.name))
     .slice(0, limit);
 }
 

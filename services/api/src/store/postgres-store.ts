@@ -1041,7 +1041,7 @@ export class PostgresStore implements PluginScoreStore {
       left join plugin_current_scores pcs on pcs.plugin_id = p.id
       group by t.id, t.slug, t.name
       having count(pt.plugin_id) >= $2
-      order by plugin_count desc, active_installs desc, t.name asc
+      order by active_installs desc, plugin_count desc, t.name asc
       limit $1
       `,
       [options.limit, options.minimumPlugins ?? 1],

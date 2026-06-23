@@ -427,7 +427,7 @@ export class MemoryStore implements PluginScoreStore {
   async listTags(options: ListTagsOptions): Promise<TagSummary[]> {
     return sampleTagSummaries()
       .filter((tag) => tag.pluginCount >= (options.minimumPlugins ?? 1))
-      .sort((a, b) => b.pluginCount - a.pluginCount || b.activeInstalls - a.activeInstalls || a.name.localeCompare(b.name))
+      .sort((a, b) => b.activeInstalls - a.activeInstalls || b.pluginCount - a.pluginCount || a.name.localeCompare(b.name))
       .slice(0, options.limit);
   }
 
