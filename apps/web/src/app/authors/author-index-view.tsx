@@ -7,13 +7,55 @@ import { useState, type ReactNode } from "react";
 import type { AuthorIndexSort } from "@/lib/api";
 import { authorIndexSortKeys, authorIndexSorts } from "./author-index-sorts";
 
+const publicApiBaseUrl =
+  process.env.NEXT_PUBLIC_PLUGINSCORE_API_URL ?? "https://api.pluginscore.com";
+
 type AuthorIndexViewProps = {
-  authorLists: Record<AuthorIndexSort, AuthorSummary[]>;
+  initialAuthors: AuthorSummary[];
+  limit: number;
 };
 
-export function AuthorIndexView({ authorLists }: AuthorIndexViewProps) {
+export function AuthorIndexView({ initialAuthors, limit }: AuthorIndexViewProps) {
   const [sort, setSort] = useState<AuthorIndexSort>("installs_desc");
+  const [authorLists, setAuthorLists] = useState<Partial<Record<AuthorIndexSort, AuthorSummary[]>>>({
+    installs_desc: initialAuthors,
+  });
+  const [loadingSort, setLoadingSort] = useState<AuthorIndexSort | null>(null);
+  const [errorSort, setErrorSort] = useState<AuthorIndexSort | null>(null);
   const authors = authorLists[sort] ?? [];
+
+  async function selectSort(nextSort: AuthorIndexSort) {
+    setSort(nextSort);
+    setErrorSort(null);
+
+    if (authorLists[nextSort]) {
+      return;
+    }
+
+    setLoadingSort(nextSort);
+
+    try {
+      const params = new URLSearchParams({
+        limit: String(limit),
+        sort: nextSort,
+      });
+      const response = await fetch(`${publicApiBaseUrl}/authors?${params.toString()}`);
+
+      if (!response.ok) {
+        throw new Error(`Failed to load authors: ${response.status}`);
+      }
+
+      const nextAuthors = await response.json() as AuthorSummary[];
+      setAuthorLists((current) => ({
+        ...current,
+        [nextSort]: nextAuthors,
+      }));
+    } catch {
+      setErrorSort(nextSort);
+    } finally {
+      setLoadingSort((current) => (current === nextSort ? null : current));
+    }
+  }
 
   return (
     <section className="rounded-md border border-line bg-surface">
@@ -26,7 +68,7 @@ export function AuthorIndexView({ authorLists }: AuthorIndexViewProps) {
             <button
               key={sortKey}
               type="button"
-              onClick={() => setSort(sortKey)}
+              onClick={() => void selectSort(sortKey)}
               className={`rounded-md border px-3 py-2 text-sm font-medium transition ${
                 sortKey === sort
                   ? "border-brand/40 bg-brand/10 text-foreground"
@@ -107,6 +149,12 @@ export function AuthorIndexView({ authorLists }: AuthorIndexViewProps) {
             </article>
           );
         })}
+        {loadingSort === sort && authors.length === 0 ? (
+          <div className="p-4 text-sm text-muted">Loading authors...</div>
+        ) : null}
+        {errorSort === sort ? (
+          <div className="p-4 text-sm text-danger">Unable to load this author list.</div>
+        ) : null}
       </div>
     </section>
   );

@@ -42,7 +42,12 @@ export function getConfig(): ApiConfig {
 
 function parseCorsOrigin(value?: string) {
   if (!value) {
-    return ["http://127.0.0.1:3000", "http://localhost:3000"];
+    return [
+      "https://pluginscore.com",
+      "https://www.pluginscore.com",
+      "http://127.0.0.1:3000",
+      "http://localhost:3000",
+    ];
   }
 
   return value.split(",").map((origin) => origin.trim()).filter(Boolean);
