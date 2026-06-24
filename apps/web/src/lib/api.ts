@@ -6,8 +6,6 @@ import type {
   ExternalConnectionAnalysisMode,
   ExternalConnectionOperations,
   ExternalDomainDetail,
-  ExternalDomainFamilySummary,
-  ExternalDomainScope,
   ExternalDomainSummary,
   IssueSummary,
   OperationsSummary,
@@ -202,20 +200,9 @@ export async function getExternalDomains(limit = 100, minimumPlugins = 1) {
   );
 }
 
-export async function getExternalDomainFamilies(limit = 100, minimumPlugins = 1) {
-  return fetchFromApi<ExternalDomainFamilySummary[]>(
-    `/domain-families?limit=${limit}&minimumPlugins=${minimumPlugins}`,
-    [],
-  );
-}
-
-export async function getExternalDomain(
-  domain: string,
-  limit = 100,
-  scope: ExternalDomainScope = "exact",
-) {
+export async function getExternalDomain(domain: string, limit = 100) {
   return fetchFromApi<ExternalDomainDetail | null>(
-    `/domains/${encodeURIComponent(domain)}?limit=${limit}&scope=${scope}`,
+    `/domains/${encodeURIComponent(domain)}?limit=${limit}`,
     null,
   );
 }

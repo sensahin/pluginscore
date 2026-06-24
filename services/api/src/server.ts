@@ -90,7 +90,6 @@ const listExternalDomainsQuery = z.object({
 
 const externalDomainDetailQuery = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(100),
-  scope: z.enum(["exact", "family"]).default("exact"),
 });
 
 const tagDetailQuery = z.object({
@@ -525,11 +524,6 @@ export async function createServer(config: ApiConfig, store: PluginScoreStore) {
   app.get("/domains", async (request) => {
     const query = listExternalDomainsQuery.parse(request.query);
     return store.listExternalDomains(query);
-  });
-
-  app.get("/domain-families", async (request) => {
-    const query = listExternalDomainsQuery.parse(request.query);
-    return store.listExternalDomainFamilies(query);
   });
 
   app.get("/domains/:domain", async (request, reply) => {

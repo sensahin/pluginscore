@@ -8,7 +8,6 @@ import type {
   ExternalConnectionOperations,
   ExternalConnectionSettings,
   ExternalDomainDetail,
-  ExternalDomainFamilySummary,
   ExternalDomainPluginSummary,
   ExternalDomainSummary,
   IssueSummary,
@@ -40,12 +39,9 @@ import type {
 } from "@pluginscore/core";
 import {
   enrichIssueSummary,
-  externalDomainClassification,
-  externalDomainRoot,
   getIssueDisplayTitle,
   getIssueEditorial,
   isPlatformReferenceExternalDomain,
-  isPlainExternalHostname,
   normalizeExternalDomain,
 } from "@pluginscore/core";
 import {
@@ -1253,7 +1249,7 @@ export class PostgresStore implements PluginScoreStore {
   async listExternalDomains(options: ListExternalDomainsOptions): Promise<ExternalDomainSummary[]> {
     const result = await this.pool.query(
       `
-      with raw_domain_findings as (
+      with domain_findings as (
         select
           regexp_replace(lower(finding_item->>'domain'), '^www\\.', '') as domain,
           eca.plugin_id,
@@ -1266,16 +1262,9 @@ export class PostgresStore implements PluginScoreStore {
           and finding_item ? 'domain'
           and coalesce(finding_item->>'domain', '') <> ''
           and finding_item->>'type' in ('outbound_http', 'external_asset')
-      ),
-      domain_findings as (
-        select
-          *,
-          ${externalDomainRootSql("domain")} as root_domain
-        from raw_domain_findings
       )
       select
         domain,
-        root_domain,
         count(distinct plugin_id)::integer as plugin_count,
         count(*)::integer as total_references,
         count(*) filter (where type = 'outbound_http')::integer as outbound_references,
@@ -1294,103 +1283,6 @@ export class PostgresStore implements PluginScoreStore {
     return result.rows.map(rowToExternalDomainSummary);
   }
 
-  async listExternalDomainFamilies(options: ListExternalDomainsOptions): Promise<ExternalDomainFamilySummary[]> {
-    const result = await this.pool.query(
-      `
-      with raw_domain_findings as (
-        select
-          regexp_replace(lower(finding_item->>'domain'), '^www\\.', '') as domain,
-          eca.plugin_id,
-          eca.analyzed_at,
-          finding_item->>'type' as type,
-          finding_item->>'confidence' as confidence
-        from external_connection_analyses eca
-        cross join lateral jsonb_array_elements(coalesce(eca.summary_json->'findings', '[]'::jsonb)) finding_item
-        where eca.status = 'complete'
-          and finding_item ? 'domain'
-          and coalesce(finding_item->>'domain', '') <> ''
-          and finding_item->>'type' in ('outbound_http', 'external_asset')
-      ),
-      domain_findings as (
-        select
-          *,
-          ${externalDomainRootSql("domain")} as root_domain
-        from raw_domain_findings
-      ),
-      domain_summaries as (
-        select
-          root_domain,
-          domain,
-          count(distinct plugin_id)::integer as plugin_count,
-          count(*)::integer as total_references,
-          count(*) filter (where type = 'outbound_http')::integer as outbound_references,
-          count(*) filter (where type = 'external_asset')::integer as external_asset_references,
-          max(analyzed_at) as last_seen_at,
-          min(case confidence when 'high' then 1 when 'medium' then 2 else 3 end)::integer as confidence_rank
-        from domain_findings
-        group by root_domain, domain
-      ),
-      family_summaries as (
-        select
-          root_domain,
-          count(distinct plugin_id)::integer as plugin_count,
-          count(*)::integer as total_references,
-          count(*) filter (where type = 'outbound_http')::integer as outbound_references,
-          count(*) filter (where type = 'external_asset')::integer as external_asset_references,
-          max(analyzed_at) as last_seen_at,
-          min(case confidence when 'high' then 1 when 'medium' then 2 else 3 end)::integer as confidence_rank
-        from domain_findings
-        group by root_domain
-        having count(distinct plugin_id) >= $2
-      )
-      select
-        fs.root_domain,
-        count(ds.domain)::integer as domain_count,
-        fs.plugin_count,
-        fs.total_references,
-        fs.outbound_references,
-        fs.external_asset_references,
-        fs.last_seen_at,
-        fs.confidence_rank,
-        coalesce(
-          jsonb_agg(
-            jsonb_build_object(
-              'domain', ds.domain,
-              'root_domain', ds.root_domain,
-              'plugin_count', ds.plugin_count,
-              'total_references', ds.total_references,
-              'outbound_references', ds.outbound_references,
-              'external_asset_references', ds.external_asset_references,
-              'last_seen_at', ds.last_seen_at,
-              'confidence_rank', ds.confidence_rank
-            )
-            order by
-              case when ds.domain = fs.root_domain then 0 else 1 end,
-              ds.plugin_count desc,
-              ds.total_references desc,
-              ds.domain asc
-          ),
-          '[]'::jsonb
-        ) as domains
-      from family_summaries fs
-      join domain_summaries ds on ds.root_domain = fs.root_domain
-      group by
-        fs.root_domain,
-        fs.plugin_count,
-        fs.total_references,
-        fs.outbound_references,
-        fs.external_asset_references,
-        fs.last_seen_at,
-        fs.confidence_rank
-      order by fs.plugin_count desc, fs.total_references desc, fs.root_domain asc
-      limit $1
-      `,
-      [options.limit, options.minimumPlugins ?? 1],
-    );
-
-    return result.rows.map(rowToExternalDomainFamilySummary);
-  }
-
   async getExternalDomain(domain: string, options: GetExternalDomainOptions): Promise<ExternalDomainDetail | null> {
     const normalizedDomain = normalizeExternalDomainForQuery(domain);
 
@@ -1398,17 +1290,9 @@ export class PostgresStore implements PluginScoreStore {
       return null;
     }
 
-    const rootDomain = externalDomainRoot(normalizedDomain);
-    const scope = options.scope === "family" ? "family" : "exact";
-    const lookupDomain = scope === "family" ? rootDomain : normalizedDomain;
-    const domainMatchSql =
-      scope === "family"
-        ? "root_domain = $1"
-        : "domain = $1";
-
     const summaryResult = await this.pool.query(
       `
-      with raw_domain_findings as (
+      with domain_findings as (
         select
           regexp_replace(lower(finding_item->>'domain'), '^www\\.', '') as domain,
           eca.plugin_id,
@@ -1419,17 +1303,11 @@ export class PostgresStore implements PluginScoreStore {
         cross join lateral jsonb_array_elements(coalesce(eca.summary_json->'findings', '[]'::jsonb)) finding_item
         where eca.status = 'complete'
           and finding_item ? 'domain'
+          and regexp_replace(lower(finding_item->>'domain'), '^www\\.', '') = $1
           and finding_item->>'type' in ('outbound_http', 'external_asset')
-      ),
-      domain_findings as (
-        select
-          *,
-          ${externalDomainRootSql("domain")} as root_domain
-        from raw_domain_findings
       )
       select
-        ${scope === "family" ? "root_domain" : "domain"} as domain,
-        ${scope === "family" ? "root_domain" : "min(root_domain)"} as root_domain,
+        domain,
         count(distinct plugin_id)::integer as plugin_count,
         count(*)::integer as total_references,
         count(*) filter (where type = 'outbound_http')::integer as outbound_references,
@@ -1437,11 +1315,10 @@ export class PostgresStore implements PluginScoreStore {
         max(analyzed_at) as last_seen_at,
         min(case confidence when 'high' then 1 when 'medium' then 2 else 3 end)::integer as confidence_rank
       from domain_findings
-      where ${domainMatchSql}
-      group by ${scope === "family" ? "root_domain" : "domain"}
+      group by domain
       limit 1
       `,
-      [lookupDomain],
+      [normalizedDomain],
     );
     const summary = summaryResult.rows[0]
       ? rowToExternalDomainSummary(summaryResult.rows[0])
@@ -1451,82 +1328,23 @@ export class PostgresStore implements PluginScoreStore {
       return null;
     }
 
-    const domainsResult = await this.pool.query(
-      `
-      with raw_domain_findings as (
-        select
-          regexp_replace(lower(finding_item->>'domain'), '^www\\.', '') as domain,
-          eca.plugin_id,
-          eca.analyzed_at,
-          finding_item->>'type' as type,
-          finding_item->>'confidence' as confidence
-        from external_connection_analyses eca
-        cross join lateral jsonb_array_elements(coalesce(eca.summary_json->'findings', '[]'::jsonb)) finding_item
-        where eca.status = 'complete'
-          and finding_item ? 'domain'
-          and finding_item->>'type' in ('outbound_http', 'external_asset')
-      ),
-      domain_findings as (
-        select
-          *,
-          ${externalDomainRootSql("domain")} as root_domain
-        from raw_domain_findings
-      )
-      select
-        domain,
-        root_domain,
-        count(distinct plugin_id)::integer as plugin_count,
-        count(*)::integer as total_references,
-        count(*) filter (where type = 'outbound_http')::integer as outbound_references,
-        count(*) filter (where type = 'external_asset')::integer as external_asset_references,
-        max(analyzed_at) as last_seen_at,
-        min(case confidence when 'high' then 1 when 'medium' then 2 else 3 end)::integer as confidence_rank
-      from domain_findings
-      where ${domainMatchSql}
-      group by root_domain, domain
-      order by
-        case when domain = root_domain then 0 else 1 end,
-        count(distinct plugin_id) desc,
-        count(*) desc,
-        domain asc
-      limit 50
-      `,
-      [lookupDomain],
-    );
-
     const pluginResult = await this.pool.query(
       `
-      with raw_domain_refs as (
-        select
-          eca.plugin_id,
-          eca.plugin_version,
-          eca.analyzed_at,
-          regexp_replace(lower(finding_item->>'domain'), '^www\\.', '') as domain,
-          finding_item->>'type' as type
-        from external_connection_analyses eca
-        cross join lateral jsonb_array_elements(coalesce(eca.summary_json->'findings', '[]'::jsonb)) finding_item
-        where eca.status = 'complete'
-          and finding_item ? 'domain'
-          and finding_item->>'type' in ('outbound_http', 'external_asset')
-      ),
-      domain_refs as (
-        select
-          *,
-          ${externalDomainRootSql("domain")} as root_domain
-        from raw_domain_refs
-      ),
-      domain_plugin_refs as (
+      with domain_plugin_refs as (
         select
           eca.plugin_id,
           count(*)::integer as domain_reference_count,
-          count(*) filter (where type = 'outbound_http')::integer as domain_outbound_references,
-          count(*) filter (where type = 'external_asset')::integer as domain_external_asset_references,
-          array_remove(array_agg(distinct type), null) as domain_reference_types,
-          array_remove(array_agg(distinct domain order by domain), null) as domain_referenced_domains,
-          max(plugin_version) as domain_plugin_version,
-          max(analyzed_at) as domain_analyzed_at
-        from domain_refs eca
-        where ${domainMatchSql}
+          count(*) filter (where finding_item->>'type' = 'outbound_http')::integer as domain_outbound_references,
+          count(*) filter (where finding_item->>'type' = 'external_asset')::integer as domain_external_asset_references,
+          array_remove(array_agg(distinct finding_item->>'type'), null) as domain_reference_types,
+          max(eca.plugin_version) as domain_plugin_version,
+          max(eca.analyzed_at) as domain_analyzed_at
+        from external_connection_analyses eca
+        cross join lateral jsonb_array_elements(coalesce(eca.summary_json->'findings', '[]'::jsonb)) finding_item
+        where eca.status = 'complete'
+          and finding_item ? 'domain'
+          and regexp_replace(lower(finding_item->>'domain'), '^www\\.', '') = $1
+          and finding_item->>'type' in ('outbound_http', 'external_asset')
         group by eca.plugin_id
       ),
       domain_samples as (
@@ -1535,15 +1353,9 @@ export class PostgresStore implements PluginScoreStore {
           domain_item->'sampleUrls' as domain_sample_urls
         from external_connection_analyses eca
         cross join lateral jsonb_array_elements(coalesce(eca.summary_json->'domains', '[]'::jsonb)) domain_item
-        cross join lateral (
-          select regexp_replace(lower(domain_item->>'domain'), '^www\\.', '') as domain
-        ) normalized_domain
-        cross join lateral (
-          select ${externalDomainRootSql("normalized_domain.domain")} as root_domain
-        ) normalized_root
         where eca.status = 'complete'
           and domain_item ? 'domain'
-          and ${scope === "family" ? "normalized_root.root_domain = $1" : "normalized_domain.domain = $1"}
+          and regexp_replace(lower(domain_item->>'domain'), '^www\\.', '') = $1
         order by eca.plugin_id, eca.analyzed_at desc
       )
       ${pluginListSelectSql(`
@@ -1553,7 +1365,6 @@ export class PostgresStore implements PluginScoreStore {
         dpr.domain_outbound_references,
         dpr.domain_external_asset_references,
         dpr.domain_reference_types,
-        dpr.domain_referenced_domains,
         coalesce(ds.domain_sample_urls, '[]'::jsonb) as domain_sample_urls
       `)}
       from domain_plugin_refs dpr
@@ -1564,14 +1375,11 @@ export class PostgresStore implements PluginScoreStore {
       order by coalesce(p.active_installs, 0) desc, p.slug asc
       limit $2
       `,
-      [lookupDomain, options.limit],
+      [normalizedDomain, options.limit],
     );
 
     return {
       ...summary,
-      scope,
-      requestedDomain: normalizedDomain,
-      domains: domainsResult.rows.map(rowToExternalDomainSummary),
       plugins: pluginResult.rows.map(rowToExternalDomainPluginSummary),
     };
   }
@@ -2822,41 +2630,6 @@ function pluginListSelectSql(extraColumn?: string) {
   `;
 }
 
-function externalDomainRootSql(domainExpression: string) {
-  const labels = `string_to_array(${domainExpression}, '.')`;
-  const labelCount = `array_length(${labels}, 1)`;
-  const labelFromEnd = (offset: number) =>
-    `split_part(${domainExpression}, '.', ${labelCount} - ${offset})`;
-  const lastTwo = `concat(${labelFromEnd(1)}, '.', ${labelFromEnd(0)})`;
-  const lastThree = `concat(${labelFromEnd(2)}, '.', ${labelFromEnd(1)}, '.', ${labelFromEnd(0)})`;
-
-  return `
-      case
-        when ${domainExpression} !~ '^[a-z0-9][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$' then ${domainExpression}
-        when ${labelCount} >= 3
-          and ${lastTwo} in (
-            'github.io',
-            'pages.dev',
-            'vercel.app',
-            'ac.uk',
-            'co.jp',
-            'co.uk',
-            'com.au',
-            'com.br',
-            'com.tr',
-            'com.ua',
-            'edu.au',
-            'gov.uk',
-            'net.au',
-            'org.au',
-            'org.uk'
-          )
-          then ${lastThree}
-        else ${lastTwo}
-      end
-  `;
-}
-
 function pluginTagsSelectSql() {
   return `
       left join lateral (
@@ -3085,49 +2858,17 @@ function rowToPluginSummary(row: Record<string, unknown>): PluginSummary {
 
 function rowToExternalDomainSummary(row: Record<string, unknown>): ExternalDomainSummary {
   const domain = normalizeExternalDomain(String(row.domain ?? ""));
-  const rootDomain = normalizeExternalDomain(
-    String(row.root_domain ?? externalDomainRoot(domain)),
-  );
   const confidence = confidenceFromRank(Number(row.confidence_rank ?? 3));
-  const classification = externalDomainClassification(domain, confidence);
 
   return {
     domain,
-    rootDomain,
-    isSubdomain: Boolean(domain && rootDomain && domain !== rootDomain),
-    classification,
     pluginCount: Number(row.plugin_count ?? 0),
     totalReferences: Number(row.total_references ?? 0),
     outboundReferences: Number(row.outbound_references ?? 0),
     externalAssetReferences: Number(row.external_asset_references ?? 0),
     lastSeenAt: optionalIsoDate(row.last_seen_at),
     confidence,
-    platformReference:
-      classification === "platform_reference" ||
-      isPlatformReferenceExternalDomain(domain, confidence),
-  };
-}
-
-function rowToExternalDomainFamilySummary(row: Record<string, unknown>): ExternalDomainFamilySummary {
-  const rootDomain = normalizeExternalDomain(String(row.root_domain ?? ""));
-  const confidence = confidenceFromRank(Number(row.confidence_rank ?? 3));
-  const classification = externalDomainClassification(rootDomain, confidence);
-  const domains = rowToJsonArray(row.domains).map(rowToExternalDomainSummary);
-
-  return {
-    rootDomain,
-    domainCount: Number(row.domain_count ?? domains.length),
-    pluginCount: Number(row.plugin_count ?? 0),
-    totalReferences: Number(row.total_references ?? 0),
-    outboundReferences: Number(row.outbound_references ?? 0),
-    externalAssetReferences: Number(row.external_asset_references ?? 0),
-    lastSeenAt: optionalIsoDate(row.last_seen_at),
-    confidence,
-    classification,
-    platformReference:
-      classification === "platform_reference" ||
-      isPlatformReferenceExternalDomain(rootDomain, confidence),
-    domains,
+    platformReference: isPlatformReferenceExternalDomain(domain, confidence),
   };
 }
 
@@ -3138,10 +2879,6 @@ function rowToExternalDomainPluginSummary(row: Record<string, unknown>): Externa
     plugin: rowToPluginSummary(row),
     pluginVersion: String(row.domain_plugin_version ?? row.current_version ?? "unknown"),
     analyzedAt: optionalIsoDate(row.domain_analyzed_at) ?? new Date().toISOString(),
-    referencedDomains: rowToStringArray(row.domain_referenced_domains)
-      .map(normalizeExternalDomain)
-      .filter(Boolean)
-      .slice(0, 10),
     referenceCount: Number(row.domain_reference_count ?? 0),
     referenceTypes,
     outboundReferences: Number(row.domain_outbound_references ?? 0),
@@ -3178,31 +2915,6 @@ function rowToStringArray(value: unknown): string[] {
   return [];
 }
 
-function rowToJsonArray(value: unknown): Record<string, unknown>[] {
-  if (!value) {
-    return [];
-  }
-
-  if (Array.isArray(value)) {
-    return value.filter(
-      (item): item is Record<string, unknown> =>
-        typeof item === "object" && item !== null && !Array.isArray(item),
-    );
-  }
-
-  if (typeof value === "string") {
-    try {
-      const parsed = JSON.parse(value) as unknown;
-
-      return rowToJsonArray(parsed);
-    } catch {
-      return [];
-    }
-  }
-
-  return [];
-}
-
 function confidenceFromRank(rank: number) {
   if (rank <= 1) {
     return "high";
@@ -3216,13 +2928,7 @@ function confidenceFromRank(rank: number) {
 }
 
 function normalizeExternalDomainForQuery(domain: string) {
-  const normalizedDomain = normalizeExternalDomain(domain);
-
-  if (!isPlainExternalHostname(normalizedDomain)) {
-    return "";
-  }
-
-  return normalizedDomain;
+  return normalizeExternalDomain(domain).replace(/[^a-z0-9.-]+/g, "");
 }
 
 function rowToPluginScoreHistoryPoint(row: Record<string, unknown>) {

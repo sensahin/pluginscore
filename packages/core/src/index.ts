@@ -14,11 +14,8 @@ export type {
   ExternalConnectionOperations,
   ExternalConnectionSettings,
   ExternalConnectionType,
-  ExternalDomainClassification,
   ExternalDomainDetail,
-  ExternalDomainFamilySummary,
   ExternalDomainPluginSummary,
-  ExternalDomainScope,
   ExternalDomainSummary,
   FindingCodeCount,
   IssueSummary,
@@ -59,11 +56,7 @@ export type {
   WordPressPluginMetadata,
 } from "./types.js";
 export {
-  externalDomainClassification,
-  externalDomainRoot,
   isPlatformReferenceExternalDomain,
-  isPlainExternalHostname,
-  isSubdomainOfExternalRoot,
   normalizeExternalDomain,
 } from "./external-domains.js";
 export {

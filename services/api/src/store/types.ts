@@ -5,8 +5,6 @@ import type {
   AuthorSummary,
   ExternalConnectionAnalysisMode,
   ExternalDomainDetail,
-  ExternalDomainFamilySummary,
-  ExternalDomainScope,
   ExternalDomainSummary,
   ExternalConnectionOperations,
   IssueSummary,
@@ -97,7 +95,6 @@ export type ListExternalDomainsOptions = {
 
 export type GetExternalDomainOptions = {
   limit: number;
-  scope?: ExternalDomainScope;
 };
 
 export type GetTagOptions = {
@@ -147,7 +144,6 @@ export interface PluginScoreStore {
   listTags(options: ListTagsOptions): Promise<TagSummary[]>;
   getTag(tagSlug: string, options: GetTagOptions): Promise<TagDetail | null>;
   listExternalDomains(options: ListExternalDomainsOptions): Promise<ExternalDomainSummary[]>;
-  listExternalDomainFamilies(options: ListExternalDomainsOptions): Promise<ExternalDomainFamilySummary[]>;
   getExternalDomain(domain: string, options: GetExternalDomainOptions): Promise<ExternalDomainDetail | null>;
   listTrackedPlugins(options: ListTrackedPluginsOptions): Promise<TrackedPluginSummary[]>;
   listQueue(options: ListQueueOptions): Promise<QueueJob[]>;
