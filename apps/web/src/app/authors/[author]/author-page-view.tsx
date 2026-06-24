@@ -77,7 +77,7 @@ const authorSortBySegment = Object.fromEntries(
 
 export async function generateAuthorStaticParams() {
   const authors = await getAuthors(STATIC_AUTHOR_LIMIT);
-  return authors.map((author) => ({ author: author.name }));
+  return authors.map((author) => ({ author: author.slug || author.name }));
 }
 
 export async function generateAuthorSortStaticParams() {
@@ -88,7 +88,7 @@ export async function generateAuthorSortStaticParams() {
 
   return authors.flatMap((author) =>
     sortSegments.map((sort) => ({
-      author: author.name,
+      author: author.slug || author.name,
       sort,
     })),
   );
@@ -100,11 +100,11 @@ export function authorSortFromSegment(segment: string) {
 }
 
 export function authorSortPath(
-  authorName: string,
+  authorSlug: string,
   sort: AuthorSort = "score_desc",
   page = 1,
 ) {
-  const encodedAuthor = encodeURIComponent(authorName);
+  const encodedAuthor = encodeURIComponent(authorSlug);
   const sortSegment = authorSorts[sort].segment;
   const basePath = sortSegment
     ? `/authors/${encodedAuthor}/${sortSegment}`
@@ -140,7 +140,7 @@ export async function generateAuthorMetadata({
     ...seoMetadata({
       title: titleWithPage(title, page),
       description,
-      path: authorSortPath(displayName, sort, page),
+      path: authorSortPath(detail?.slug ?? displayName, sort, page),
     }),
     keywords: [
       displayName,
@@ -234,7 +234,7 @@ export async function AuthorPageView({
           "@type": "ListItem",
           position: 3,
           name: detail.name,
-          item: `https://pluginscore.com/authors/${encodeURIComponent(detail.name)}`,
+          item: `https://pluginscore.com/authors/${encodeURIComponent(detail.slug)}`,
         },
       ],
     },
@@ -294,7 +294,7 @@ export async function AuthorPageView({
             {(Object.keys(authorSorts) as AuthorSort[]).map((sortKey) => (
               <Link
                 key={sortKey}
-                href={authorSortPath(detail.name, sortKey)}
+                href={authorSortPath(detail.slug, sortKey)}
                 className={`rounded-md border px-3 py-2 text-sm font-medium transition ${
                   sortKey === sort
                     ? "border-brand/40 bg-brand/10 text-foreground"
@@ -310,12 +310,12 @@ export async function AuthorPageView({
           <PluginListTable plugins={plugins.items} rankOffset={rankOffset} />
         </div>
         <PaginationControls
-          basePath={authorSortPath(detail.name, sort)}
+          basePath={authorSortPath(detail.slug, sort)}
           page={plugins.page}
           perPage={plugins.perPage}
           total={plugins.total}
           totalPages={plugins.totalPages}
-          hrefForPage={(targetPage) => authorSortPath(detail.name, sort, targetPage)}
+          hrefForPage={(targetPage) => authorSortPath(detail.slug, sort, targetPage)}
         />
       </section>
 

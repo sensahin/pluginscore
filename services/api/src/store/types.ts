@@ -81,6 +81,14 @@ export type ListPluginReportsOptions = {
 
 export type ListAuthorsOptions = {
   limit: number;
+  sort:
+    | "installs_desc"
+    | "downloads_desc"
+    | "score_desc"
+    | "score_asc"
+    | "new_popular_desc"
+    | "issues_desc"
+    | "scanned_desc";
 };
 
 export type ListTagsOptions = {

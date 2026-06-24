@@ -1060,23 +1060,76 @@ export class PostgresStore implements PluginScoreStore {
   }
 
   async listAuthors(options: ListAuthorsOptions): Promise<AuthorSummary[]> {
+    const orderBy = authorSummarySortSql(options.sort);
     const result = await this.pool.query(
       `
+      with author_plugins as (
+        select
+          p.author,
+          p.author_url,
+          ${authorProfileSlugSql("p")} as profile_slug,
+          ${authorKeySql("p")} as author_key,
+          p.slug as plugin_slug,
+          p.name as plugin_name,
+          p.active_installs,
+          p.downloads,
+          p.wporg_added_at,
+          pcs.audit_run_id,
+          pcs.score,
+          pcs.total_findings,
+          pcs.error_count,
+          pcs.warning_count,
+          pcs.scanned_at
+        from plugins p
+        left join plugin_current_scores pcs on pcs.plugin_id = p.id
+        where p.author is not null and btrim(p.author) <> ''
+      ),
+      ranked_author_plugins as (
+        select
+          *,
+          row_number() over (
+            partition by author_key
+            order by coalesce(active_installs, 0) desc, plugin_name asc, plugin_slug asc
+          ) as plugin_rank
+        from author_plugins
+      ),
+      author_summaries as (
+        select
+          author_key,
+          (array_agg(author order by plugin_rank))[1] as name,
+          coalesce(
+            (array_agg(profile_slug order by plugin_rank) filter (where profile_slug is not null))[1],
+            (array_agg(author order by plugin_rank))[1]
+          ) as slug,
+          (array_agg(author_url order by plugin_rank) filter (where profile_slug is not null and author_url is not null))[1] as profile_url,
+          count(*)::integer as plugin_count,
+          count(audit_run_id)::integer as audited_plugin_count,
+          coalesce(sum(active_installs), 0)::bigint as active_installs,
+          coalesce(sum(downloads), 0)::bigint as downloads,
+          round(avg(score) filter (where audit_run_id is not null))::integer as average_score,
+          count(*) filter (where audit_run_id is not null and coalesce(score, 0) < 65)::integer as needs_review_count,
+          coalesce(sum(total_findings), 0)::integer as total_findings,
+          coalesce(sum(error_count), 0)::integer as total_errors,
+          coalesce(sum(warning_count), 0)::integer as total_warnings,
+          coalesce(sum(active_installs) filter (
+            where wporg_added_at >= now() - interval '24 months'
+              and coalesce(active_installs, 0) >= 1000
+          ), 0)::bigint as new_popular_installs,
+          max(wporg_added_at) filter (
+            where wporg_added_at >= now() - interval '24 months'
+              and coalesce(active_installs, 0) >= 1000
+          ) as latest_new_popular_at,
+          max(scanned_at) as latest_scanned_at,
+          max(plugin_slug) filter (where plugin_rank = 1) as top_plugin_slug,
+          max(plugin_name) filter (where plugin_rank = 1) as top_plugin_name,
+          max(active_installs) filter (where plugin_rank = 1) as top_plugin_active_installs
+        from ranked_author_plugins
+        group by author_key
+      )
       select
-        p.author as name,
-        count(*)::integer as plugin_count,
-        count(pcs.audit_run_id)::integer as audited_plugin_count,
-        coalesce(sum(p.active_installs), 0)::bigint as active_installs,
-        coalesce(sum(p.downloads), 0)::bigint as downloads,
-        round(avg(pcs.score) filter (where pcs.audit_run_id is not null))::integer as average_score,
-        coalesce(sum(pcs.total_findings), 0)::integer as total_findings,
-        coalesce(sum(pcs.error_count), 0)::integer as total_errors,
-        coalesce(sum(pcs.warning_count), 0)::integer as total_warnings
-      from plugins p
-      left join plugin_current_scores pcs on pcs.plugin_id = p.id
-      where p.author is not null and btrim(p.author) <> ''
-      group by p.author
-      order by plugin_count desc, active_installs desc, p.author asc
+        *
+      from author_summaries
+      order by ${orderBy}
       limit $1
       `,
       [options.limit],
@@ -1094,19 +1147,75 @@ export class PostgresStore implements PluginScoreStore {
 
     const summaryResult = await this.pool.query(
       `
+      with author_plugins as (
+        select
+          p.author,
+          p.author_url,
+          ${authorProfileSlugSql("p")} as profile_slug,
+          ${authorKeySql("p")} as author_key,
+          p.slug as plugin_slug,
+          p.name as plugin_name,
+          p.active_installs,
+          p.downloads,
+          p.wporg_added_at,
+          pcs.audit_run_id,
+          pcs.score,
+          pcs.total_findings,
+          pcs.error_count,
+          pcs.warning_count,
+          pcs.scanned_at
+        from plugins p
+        left join plugin_current_scores pcs on pcs.plugin_id = p.id
+        where p.author is not null and btrim(p.author) <> ''
+      ),
+      target_author as (
+        select author_key
+        from author_plugins
+        where lower(author) = lower($1)
+          or profile_slug = lower($1)
+          or author_key = lower($1)
+        order by
+          case
+            when profile_slug = lower($1) then 0
+            when lower(author) = lower($1) then 1
+            else 2
+          end,
+          coalesce(active_installs, 0) desc,
+          plugin_name asc
+        limit 1
+      ),
+      ranked_author_plugins as (
+        select
+          author_plugins.*,
+          row_number() over (
+            partition by author_plugins.author_key
+            order by coalesce(author_plugins.active_installs, 0) desc, author_plugins.plugin_name asc, author_plugins.plugin_slug asc
+          ) as plugin_rank
+        from author_plugins
+        join target_author on target_author.author_key = author_plugins.author_key
+      )
       select
-        coalesce(min(p.author), $1) as name,
+        author_key,
+        (array_agg(author order by plugin_rank))[1] as name,
+        coalesce(
+          (array_agg(profile_slug order by plugin_rank) filter (where profile_slug is not null))[1],
+          (array_agg(author order by plugin_rank))[1]
+        ) as slug,
+        (array_agg(author_url order by plugin_rank) filter (where profile_slug is not null and author_url is not null))[1] as profile_url,
         count(*)::integer as plugin_count,
-        count(pcs.audit_run_id)::integer as audited_plugin_count,
-        coalesce(sum(p.active_installs), 0)::bigint as active_installs,
-        coalesce(sum(p.downloads), 0)::bigint as downloads,
-        round(avg(pcs.score) filter (where pcs.audit_run_id is not null))::integer as average_score,
-        coalesce(sum(pcs.total_findings), 0)::integer as total_findings,
-        coalesce(sum(pcs.error_count), 0)::integer as total_errors,
-        coalesce(sum(pcs.warning_count), 0)::integer as total_warnings
-      from plugins p
-      left join plugin_current_scores pcs on pcs.plugin_id = p.id
-      where lower(p.author) = lower($1)
+        count(audit_run_id)::integer as audited_plugin_count,
+        coalesce(sum(active_installs), 0)::bigint as active_installs,
+        coalesce(sum(downloads), 0)::bigint as downloads,
+        round(avg(score) filter (where audit_run_id is not null))::integer as average_score,
+        count(*) filter (where audit_run_id is not null and coalesce(score, 0) < 65)::integer as needs_review_count,
+        coalesce(sum(total_findings), 0)::integer as total_findings,
+        coalesce(sum(error_count), 0)::integer as total_errors,
+        coalesce(sum(warning_count), 0)::integer as total_warnings,
+        max(plugin_slug) filter (where plugin_rank = 1) as top_plugin_slug,
+        max(plugin_name) filter (where plugin_rank = 1) as top_plugin_name,
+        max(active_installs) filter (where plugin_rank = 1) as top_plugin_active_installs
+      from ranked_author_plugins
+      group by author_key
       `,
       [normalized],
     );
@@ -1122,11 +1231,11 @@ export class PostgresStore implements PluginScoreStore {
       from plugins p
       left join plugin_current_scores pcs on pcs.plugin_id = p.id
       ${pluginTagsSelectSql()}
-      where lower(p.author) = lower($1)
+      where ${authorKeySql("p")} = $1
       order by coalesce(p.active_installs, 0) desc, p.name asc
       limit 200
       `,
-      [normalized],
+      [String(summaryRow.author_key)],
     );
 
     const summary = rowToAuthorSummary(summaryRow);
@@ -2647,6 +2756,33 @@ function publicExternalDomainSql(domainExpression: string) {
   `;
 }
 
+function authorProfileSlugSql(alias: string) {
+  return `
+      case
+        when ${alias}.author_url ~* '^https?://profiles\\.wordpress\\.org/[^/?#]+/?'
+        then lower(regexp_replace(${alias}.author_url, '^https?://profiles\\.wordpress\\.org/([^/?#]+)/?.*$', '\\1', 'i'))
+        else null
+      end
+  `;
+}
+
+function authorKeySql(alias: string) {
+  return `coalesce(${authorProfileSlugSql(alias)}, lower(${alias}.author))`;
+}
+
+function authorSummarySortSql(sort: ListAuthorsOptions["sort"]) {
+  return {
+    installs_desc: "active_installs desc, plugin_count desc, lower(name) asc",
+    downloads_desc: "downloads desc, active_installs desc, lower(name) asc",
+    score_desc: "average_score desc nulls last, audited_plugin_count desc, active_installs desc, lower(name) asc",
+    score_asc: "average_score asc nulls last, total_findings desc, active_installs desc, lower(name) asc",
+    new_popular_desc:
+      "new_popular_installs desc, latest_new_popular_at desc nulls last, active_installs desc, lower(name) asc",
+    issues_desc: "total_findings desc, total_errors desc, active_installs desc, lower(name) asc",
+    scanned_desc: "latest_scanned_at desc nulls last, active_installs desc, lower(name) asc",
+  }[sort];
+}
+
 function pluginTagsSelectSql() {
   return `
       left join lateral (
@@ -3147,17 +3283,29 @@ function rowToAuditFindingsRetentionSummary(
 function rowToAuthorSummary(row: Record<string, unknown>): AuthorSummary {
   const auditedPluginCount = Number(row.audited_plugin_count ?? 0);
   const averageScore = optionalNumber(row.average_score);
+  const topPluginSlug = optionalString(row.top_plugin_slug);
+  const topPluginName = optionalString(row.top_plugin_name);
 
   return {
+    slug: String(row.slug ?? row.name),
     name: String(row.name),
+    profileUrl: optionalString(row.profile_url),
     pluginCount: Number(row.plugin_count ?? 0),
     auditedPluginCount,
     activeInstalls: Number(row.active_installs ?? 0),
     downloads: Number(row.downloads ?? 0),
     averageScore: auditedPluginCount > 0 ? averageScore : undefined,
+    needsReviewCount: Number(row.needs_review_count ?? 0),
     totalFindings: Number(row.total_findings ?? 0),
     totalErrors: Number(row.total_errors ?? 0),
     totalWarnings: Number(row.total_warnings ?? 0),
+    topPlugin: topPluginSlug && topPluginName
+      ? {
+          slug: topPluginSlug,
+          name: topPluginName,
+          activeInstalls: formatCompact(Number(row.top_plugin_active_installs ?? 0)),
+        }
+      : undefined,
   };
 }
 
@@ -3172,15 +3320,29 @@ function rowsToAuthorDetail(authorName: string, rows: Record<string, unknown>[])
     : undefined;
 
   return {
+    slug: authorName,
     name: optionalString(rows[0]?.author) ?? authorName,
+    profileUrl: optionalString(rows[0]?.author_url),
     pluginCount: rows.length,
     auditedPluginCount: auditedRows.length,
     activeInstalls: sumRows(rows, "active_installs"),
     downloads: sumRows(rows, "downloads"),
     averageScore,
+    needsReviewCount: rows.filter(
+      (row) =>
+        optionalNumber(row.audit_run_id) !== undefined &&
+        Number(row.score ?? 0) < 65,
+    ).length,
     totalFindings: sumRows(rows, "total_findings"),
     totalErrors: sumRows(rows, "error_count"),
     totalWarnings: sumRows(rows, "warning_count"),
+    topPlugin: plugins[0]
+      ? {
+          slug: plugins[0].slug,
+          name: plugins[0].name,
+          activeInstalls: plugins[0].activeInstalls,
+        }
+      : undefined,
     plugins,
   };
 }

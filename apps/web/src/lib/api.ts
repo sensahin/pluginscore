@@ -52,6 +52,14 @@ type TagSort =
   | "issues_desc"
   | "delta_desc"
   | "scanned_desc";
+export type AuthorIndexSort =
+  | "installs_desc"
+  | "downloads_desc"
+  | "score_desc"
+  | "score_asc"
+  | "new_popular_desc"
+  | "issues_desc"
+  | "scanned_desc";
 type PluginsPageOptions = {
   page?: number;
   perPage?: number;
@@ -439,10 +447,10 @@ export async function getRecentSearches(limit = 4) {
   );
 }
 
-export async function getAuthors(limit = 100) {
+export async function getAuthors(limit = 100, sort: AuthorIndexSort = "installs_desc") {
   return fetchFromApi<AuthorSummary[]>(
-    `/authors?limit=${limit}`,
-    sampleAuthors(limit),
+    `/authors?limit=${limit}&sort=${sort}`,
+    sampleAuthors(limit, sort),
   );
 }
 
@@ -707,7 +715,7 @@ function samplePluginScoreHistory(slug: string): PluginScoreHistory | null {
   };
 }
 
-function sampleAuthors(limit: number): AuthorSummary[] {
+function sampleAuthors(limit: number, sort: AuthorIndexSort): AuthorSummary[] {
   const byAuthor = new Map<string, PluginDetail[]>();
 
   for (const plugin of samplePlugins) {
@@ -722,52 +730,159 @@ function sampleAuthors(limit: number): AuthorSummary[] {
 
   return [...byAuthor.entries()]
     .map(([name, plugins]) => pluginsToAuthorDetail(name, plugins))
-    .sort((a, b) => b.pluginCount - a.pluginCount || b.activeInstalls - a.activeInstalls || a.name.localeCompare(b.name))
+    .sort((a, b) => compareAuthorSummaries(a, b, sort))
     .slice(0, limit)
     .map(authorDetailToSummary);
 }
 
 function authorDetailToSummary(author: AuthorDetail): AuthorSummary {
   return {
+    slug: author.slug,
     name: author.name,
+    profileUrl: author.profileUrl,
     pluginCount: author.pluginCount,
     auditedPluginCount: author.auditedPluginCount,
     activeInstalls: author.activeInstalls,
     downloads: author.downloads,
     averageScore: author.averageScore,
+    needsReviewCount: author.needsReviewCount,
     totalFindings: author.totalFindings,
     totalErrors: author.totalErrors,
     totalWarnings: author.totalWarnings,
+    topPlugin: author.topPlugin,
   };
 }
 
 function sampleAuthor(authorName: string): AuthorDetail | null {
   const normalized = authorName.trim().toLowerCase();
   const plugins = samplePlugins
-    .filter((plugin) => plugin.author?.toLowerCase() === normalized)
+    .filter((plugin) => {
+      const profileSlug = authorSlugFromProfileUrl(plugin.authorUrl ?? "");
+      return plugin.author?.toLowerCase() === normalized || profileSlug === normalized;
+    })
     .sort((a, b) => parseCompact(b.activeInstalls) - parseCompact(a.activeInstalls) || a.name.localeCompare(b.name));
 
   return plugins.length ? pluginsToAuthorDetail(plugins[0]?.author ?? authorName, plugins) : null;
 }
 
 function pluginsToAuthorDetail(name: string, plugins: PluginDetail[]): AuthorDetail {
-  const audited = plugins.filter((plugin) => plugin.latestAudit?.status === "complete");
+  const sortedPlugins = [...plugins].sort(
+    (a, b) => parseCompact(b.activeInstalls) - parseCompact(a.activeInstalls) || a.name.localeCompare(b.name),
+  );
+  const audited = sortedPlugins.filter((plugin) => plugin.latestAudit?.status === "complete");
   const averageScore = audited.length
     ? Math.round(audited.reduce((sum, plugin) => sum + plugin.score, 0) / audited.length)
     : undefined;
+  const topPlugin = sortedPlugins[0];
+  const profileUrl = sortedPlugins.find((plugin) => plugin.authorUrl)?.authorUrl;
 
   return {
+    slug: profileUrl ? authorSlugFromProfileUrl(profileUrl) ?? name : name,
     name,
-    pluginCount: plugins.length,
+    profileUrl,
+    pluginCount: sortedPlugins.length,
     auditedPluginCount: audited.length,
-    activeInstalls: plugins.reduce((sum, plugin) => sum + parseCompact(plugin.activeInstalls), 0),
-    downloads: plugins.reduce((sum, plugin) => sum + parseCompact(plugin.downloads), 0),
+    activeInstalls: sortedPlugins.reduce((sum, plugin) => sum + parseCompact(plugin.activeInstalls), 0),
+    downloads: sortedPlugins.reduce((sum, plugin) => sum + parseCompact(plugin.downloads), 0),
     averageScore,
-    totalFindings: plugins.reduce((sum, plugin) => sum + plugin.findings, 0),
-    totalErrors: plugins.reduce((sum, plugin) => sum + plugin.errors, 0),
-    totalWarnings: plugins.reduce((sum, plugin) => sum + plugin.warnings, 0),
-    plugins,
+    needsReviewCount: audited.filter((plugin) => plugin.score < 65).length,
+    totalFindings: sortedPlugins.reduce((sum, plugin) => sum + plugin.findings, 0),
+    totalErrors: sortedPlugins.reduce((sum, plugin) => sum + plugin.errors, 0),
+    totalWarnings: sortedPlugins.reduce((sum, plugin) => sum + plugin.warnings, 0),
+    topPlugin: topPlugin
+      ? {
+          slug: topPlugin.slug,
+          name: topPlugin.name,
+          activeInstalls: topPlugin.activeInstalls,
+        }
+      : undefined,
+    plugins: sortedPlugins,
   };
+}
+
+function compareAuthorSummaries(
+  a: AuthorDetail,
+  b: AuthorDetail,
+  sort: AuthorIndexSort,
+) {
+  const nameCompare = a.name.localeCompare(b.name);
+
+  if (sort === "downloads_desc") {
+    return b.downloads - a.downloads || b.activeInstalls - a.activeInstalls || nameCompare;
+  }
+
+  if (sort === "score_desc") {
+    return compareOptionalNumbersDesc(a.averageScore, b.averageScore) ||
+      b.auditedPluginCount - a.auditedPluginCount ||
+      b.activeInstalls - a.activeInstalls ||
+      nameCompare;
+  }
+
+  if (sort === "score_asc") {
+    return compareOptionalNumbersAsc(a.averageScore, b.averageScore) ||
+      b.totalFindings - a.totalFindings ||
+      b.activeInstalls - a.activeInstalls ||
+      nameCompare;
+  }
+
+  if (sort === "new_popular_desc") {
+    return newPopularInstalls(b) - newPopularInstalls(a) || b.activeInstalls - a.activeInstalls || nameCompare;
+  }
+
+  if (sort === "issues_desc") {
+    return b.totalFindings - a.totalFindings || b.totalErrors - a.totalErrors || b.activeInstalls - a.activeInstalls || nameCompare;
+  }
+
+  if (sort === "scanned_desc") {
+    return latestScannedTime(b) - latestScannedTime(a) || b.activeInstalls - a.activeInstalls || nameCompare;
+  }
+
+  return b.activeInstalls - a.activeInstalls || b.pluginCount - a.pluginCount || nameCompare;
+}
+
+function compareOptionalNumbersDesc(a: number | undefined, b: number | undefined) {
+  if (a === undefined && b === undefined) return 0;
+  if (a === undefined) return 1;
+  if (b === undefined) return -1;
+  return b - a;
+}
+
+function compareOptionalNumbersAsc(a: number | undefined, b: number | undefined) {
+  if (a === undefined && b === undefined) return 0;
+  if (a === undefined) return 1;
+  if (b === undefined) return -1;
+  return a - b;
+}
+
+function newPopularInstalls(author: AuthorDetail) {
+  return author.plugins
+    .filter((plugin) => isSampleNewPopularPlugin(plugin))
+    .reduce((sum, plugin) => sum + parseCompact(plugin.activeInstalls), 0);
+}
+
+function latestScannedTime(author: AuthorDetail) {
+  return Math.max(
+    0,
+    ...author.plugins.map((plugin) => {
+      const value = plugin.scannedAt;
+      const time = value ? new Date(value).getTime() : 0;
+      return Number.isFinite(time) ? time : 0;
+    }),
+  );
+}
+
+function authorSlugFromProfileUrl(value: string) {
+  try {
+    const url = new URL(value);
+
+    if (url.hostname.toLowerCase() !== "profiles.wordpress.org") {
+      return null;
+    }
+
+    return url.pathname.split("/").filter(Boolean)[0]?.toLowerCase() ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function parseCompact(value: string) {

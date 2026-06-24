@@ -409,12 +409,35 @@ function AuthorLink({ plugin }: { plugin: PluginDetail }) {
 
   return (
     <Link
-      href={`/authors/${encodeURIComponent(plugin.author)}`}
+      href={`/authors/${encodeURIComponent(authorRouteKey(plugin.author, plugin.authorUrl))}`}
       className="text-info hover:underline"
     >
       {plugin.author}
     </Link>
   );
+}
+
+function authorRouteKey(name: string, profileUrl?: string) {
+  const profileSlug = authorSlugFromProfileUrl(profileUrl);
+  return profileSlug ?? name;
+}
+
+function authorSlugFromProfileUrl(value: string | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const url = new URL(value);
+
+    if (url.hostname.toLowerCase() !== "profiles.wordpress.org") {
+      return null;
+    }
+
+    return url.pathname.split("/").filter(Boolean)[0]?.toLowerCase() ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function HistoryComparison({ entries }: { entries: ComparisonEntry[] }) {

@@ -76,6 +76,17 @@ const listRecentSearchesQuery = z.object({
 
 const listAuthorsQuery = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(100),
+  sort: z
+    .enum([
+      "installs_desc",
+      "downloads_desc",
+      "score_desc",
+      "score_asc",
+      "new_popular_desc",
+      "issues_desc",
+      "scanned_desc",
+    ])
+    .default("installs_desc"),
 });
 
 const listTagsQuery = z.object({

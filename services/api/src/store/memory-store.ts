@@ -441,7 +441,7 @@ export class MemoryStore implements PluginScoreStore {
 
     return [...byAuthor.entries()]
       .map(([name, authorPlugins]) => pluginsToAuthorDetail(name, authorPlugins))
-      .sort((a, b) => b.pluginCount - a.pluginCount || b.activeInstalls - a.activeInstalls || a.name.localeCompare(b.name))
+      .sort((a, b) => compareAuthorSummaries(a, b, options.sort))
       .slice(0, options.limit)
       .map(({ plugins: _plugins, ...summary }) => summary);
   }
@@ -454,7 +454,10 @@ export class MemoryStore implements PluginScoreStore {
     }
 
     const authorPlugins = plugins
-      .filter((plugin) => plugin.author?.toLowerCase() === normalized)
+      .filter((plugin) => {
+        const profileSlug = authorSlugFromProfileUrl(plugin.authorUrl ?? "");
+        return plugin.author?.toLowerCase() === normalized || profileSlug === normalized;
+      })
       .sort((a, b) => parseDownloads(b.activeInstalls) - parseDownloads(a.activeInstalls) || a.name.localeCompare(b.name));
 
     return authorPlugins.length ? pluginsToAuthorDetail(authorPlugins[0]?.author ?? authorName, authorPlugins) : null;
@@ -677,23 +680,123 @@ function auditCompletedAt(plugin: SamplePlugin) {
 }
 
 function pluginsToAuthorDetail(name: string, authorPlugins: SamplePlugin[]): AuthorDetail {
-  const audited = authorPlugins.filter((plugin) => plugin.latestAudit?.status === "complete");
+  const sortedPlugins = [...authorPlugins].sort(
+    (a, b) => parseDownloads(b.activeInstalls) - parseDownloads(a.activeInstalls) || a.name.localeCompare(b.name),
+  );
+  const audited = sortedPlugins.filter((plugin) => plugin.latestAudit?.status === "complete");
   const averageScore = audited.length
     ? Math.round(audited.reduce((sum, plugin) => sum + plugin.score, 0) / audited.length)
     : undefined;
+  const topPlugin = sortedPlugins[0];
+  const profileUrl = sortedPlugins.find((plugin) => plugin.authorUrl)?.authorUrl;
 
   return {
+    slug: profileUrl ? authorSlugFromProfileUrl(profileUrl) ?? name : name,
     name,
-    pluginCount: authorPlugins.length,
+    profileUrl,
+    pluginCount: sortedPlugins.length,
     auditedPluginCount: audited.length,
-    activeInstalls: authorPlugins.reduce((sum, plugin) => sum + parseDownloads(plugin.activeInstalls), 0),
-    downloads: authorPlugins.reduce((sum, plugin) => sum + parseDownloads(plugin.downloads), 0),
+    activeInstalls: sortedPlugins.reduce((sum, plugin) => sum + parseDownloads(plugin.activeInstalls), 0),
+    downloads: sortedPlugins.reduce((sum, plugin) => sum + parseDownloads(plugin.downloads), 0),
     averageScore,
-    totalFindings: authorPlugins.reduce((sum, plugin) => sum + plugin.findings, 0),
-    totalErrors: authorPlugins.reduce((sum, plugin) => sum + plugin.errors, 0),
-    totalWarnings: authorPlugins.reduce((sum, plugin) => sum + plugin.warnings, 0),
-    plugins: authorPlugins,
+    needsReviewCount: audited.filter((plugin) => plugin.score < 65).length,
+    totalFindings: sortedPlugins.reduce((sum, plugin) => sum + plugin.findings, 0),
+    totalErrors: sortedPlugins.reduce((sum, plugin) => sum + plugin.errors, 0),
+    totalWarnings: sortedPlugins.reduce((sum, plugin) => sum + plugin.warnings, 0),
+    topPlugin: topPlugin
+      ? {
+          slug: topPlugin.slug,
+          name: topPlugin.name,
+          activeInstalls: topPlugin.activeInstalls,
+        }
+      : undefined,
+    plugins: sortedPlugins,
   };
+}
+
+function compareAuthorSummaries(
+  a: AuthorDetail,
+  b: AuthorDetail,
+  sort: ListAuthorsOptions["sort"],
+) {
+  const nameCompare = a.name.localeCompare(b.name);
+
+  if (sort === "downloads_desc") {
+    return b.downloads - a.downloads || b.activeInstalls - a.activeInstalls || nameCompare;
+  }
+
+  if (sort === "score_desc") {
+    return compareOptionalNumbersDesc(a.averageScore, b.averageScore) ||
+      b.auditedPluginCount - a.auditedPluginCount ||
+      b.activeInstalls - a.activeInstalls ||
+      nameCompare;
+  }
+
+  if (sort === "score_asc") {
+    return compareOptionalNumbersAsc(a.averageScore, b.averageScore) ||
+      b.totalFindings - a.totalFindings ||
+      b.activeInstalls - a.activeInstalls ||
+      nameCompare;
+  }
+
+  if (sort === "new_popular_desc") {
+    return newPopularInstalls(b) - newPopularInstalls(a) || b.activeInstalls - a.activeInstalls || nameCompare;
+  }
+
+  if (sort === "issues_desc") {
+    return b.totalFindings - a.totalFindings || b.totalErrors - a.totalErrors || b.activeInstalls - a.activeInstalls || nameCompare;
+  }
+
+  if (sort === "scanned_desc") {
+    return latestScannedTime(b) - latestScannedTime(a) || b.activeInstalls - a.activeInstalls || nameCompare;
+  }
+
+  return b.activeInstalls - a.activeInstalls || b.pluginCount - a.pluginCount || nameCompare;
+}
+
+function compareOptionalNumbersDesc(a: number | undefined, b: number | undefined) {
+  if (a === undefined && b === undefined) return 0;
+  if (a === undefined) return 1;
+  if (b === undefined) return -1;
+  return b - a;
+}
+
+function compareOptionalNumbersAsc(a: number | undefined, b: number | undefined) {
+  if (a === undefined && b === undefined) return 0;
+  if (a === undefined) return 1;
+  if (b === undefined) return -1;
+  return a - b;
+}
+
+function newPopularInstalls(author: AuthorDetail) {
+  return author.plugins
+    .filter((plugin) => isNewPopularPlugin(plugin))
+    .reduce((sum, plugin) => sum + parseDownloads(plugin.activeInstalls), 0);
+}
+
+function latestScannedTime(author: AuthorDetail) {
+  return Math.max(
+    0,
+    ...author.plugins.map((plugin) => {
+      const value = plugin.scannedAt;
+      const time = value ? new Date(value).getTime() : 0;
+      return Number.isFinite(time) ? time : 0;
+    }),
+  );
+}
+
+function authorSlugFromProfileUrl(value: string) {
+  try {
+    const url = new URL(value);
+
+    if (url.hostname.toLowerCase() !== "profiles.wordpress.org") {
+      return null;
+    }
+
+    return url.pathname.split("/").filter(Boolean)[0]?.toLowerCase() ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function sampleTagSummaries(): TagSummary[] {
@@ -734,7 +837,7 @@ function parseDownloads(downloads: string) {
   return value;
 }
 
-function isNewPopularPlugin(plugin: SamplePlugin) {
+function isNewPopularPlugin(plugin: { addedAt?: string; activeInstalls: string }) {
   if (!plugin.addedAt || parseDownloads(plugin.activeInstalls) < 1000) return false;
   const addedAt = new Date(plugin.addedAt);
   if (Number.isNaN(addedAt.getTime())) return false;

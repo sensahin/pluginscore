@@ -156,7 +156,9 @@ async function getRelatedPluginTabs(plugin: PluginDetail): Promise<RelatedPlugin
         getPlugins({ limit: 8, sort: "installs_desc", tag }),
       ),
     ),
-    plugin.author ? getAuthor(plugin.author) : Promise.resolve(null),
+    plugin.author
+      ? getAuthor(authorRouteKey(plugin.author, plugin.authorUrl))
+      : Promise.resolve(null),
   ]);
 
   const bestInTags = sortPluginSummaries(
@@ -218,9 +220,7 @@ function PluginSummaryHeader({
   supportRate?: number;
 }) {
   const wpUrl = `https://wordpress.org/plugins/${encodeURIComponent(plugin.slug)}/`;
-  const authorHref = plugin.author
-    ? `/authors/${encodeURIComponent(plugin.author)}`
-    : undefined;
+  const authorHref = plugin.author ? authorHrefForPlugin(plugin) : undefined;
 
   return (
     <section className="mb-2 mt-1">
@@ -1250,9 +1250,7 @@ function PluginMetadata({
   plugin: PluginDetail;
   supportRate?: number;
 }) {
-  const authorHref = plugin.author
-    ? `/authors/${encodeURIComponent(plugin.author)}`
-    : undefined;
+  const authorHref = plugin.author ? authorHrefForPlugin(plugin) : undefined;
   const maintenanceSignal = getPluginMaintenanceSignal(plugin);
 
   return (
@@ -1298,6 +1296,37 @@ function PluginMetadata({
       </div>
     </aside>
   );
+}
+
+function authorHrefForPlugin(plugin: Pick<PluginDetail, "author" | "authorUrl">) {
+  if (!plugin.author) {
+    return undefined;
+  }
+
+  return `/authors/${encodeURIComponent(authorRouteKey(plugin.author, plugin.authorUrl))}`;
+}
+
+function authorRouteKey(name: string, profileUrl?: string) {
+  const profileSlug = authorSlugFromProfileUrl(profileUrl);
+  return profileSlug ?? name;
+}
+
+function authorSlugFromProfileUrl(value: string | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const url = new URL(value);
+
+    if (url.hostname.toLowerCase() !== "profiles.wordpress.org") {
+      return null;
+    }
+
+    return url.pathname.split("/").filter(Boolean)[0]?.toLowerCase() ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function MaintenanceValue({ signal }: { signal: PluginMaintenanceSignal }) {

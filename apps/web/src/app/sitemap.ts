@@ -63,7 +63,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }));
 
   const authorRoutes = authors.flatMap((author) => {
-    const authorPath = `/authors/${encodeURIComponent(author.name)}`;
+    const authorPath = `/authors/${encodeURIComponent(author.slug || author.name)}`;
 
     return [
       {

@@ -220,15 +220,19 @@ export type PaginatedResult<T> = {
 };
 
 export type AuthorSummary = {
+  slug: string;
   name: string;
+  profileUrl?: string;
   pluginCount: number;
   auditedPluginCount: number;
   activeInstalls: number;
   downloads: number;
   averageScore?: number;
+  needsReviewCount: number;
   totalFindings: number;
   totalErrors: number;
   totalWarnings: number;
+  topPlugin?: Pick<PluginSummary, "slug" | "name" | "activeInstalls">;
 };
 
 export type AuthorDetail = AuthorSummary & {

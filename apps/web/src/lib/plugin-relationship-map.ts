@@ -86,12 +86,13 @@ export function buildPluginRelationshipMap(
   });
 
   if (plugin.author) {
-    authorNodeId = relationshipId("author", plugin.author);
+    const authorKey = authorRouteKey(plugin.author, plugin.authorUrl);
+    authorNodeId = relationshipId("author", authorKey);
     if (addNode(nodes, {
       id: authorNodeId,
       type: "author",
       label: plugin.author,
-      href: `/authors/${encodeURIComponent(plugin.author)}`,
+      href: `/authors/${encodeURIComponent(authorKey)}`,
       metric: "author",
       size: 34,
     })) {
@@ -213,19 +214,19 @@ export function buildPluginRelationshipMap(
 }
 
 export function buildAuthorRelationshipMap(
-  author: Pick<AuthorDetail, "name" | "plugins">,
+  author: Pick<AuthorDetail, "name" | "slug" | "plugins">,
 ): PluginRelationshipMapData {
   const nodes = new Map<string, PluginRelationshipNode>();
   const edges = new Map<string, PluginRelationshipEdge>();
   const plugins = uniquePluginSummaries(author.plugins)
     .sort((a, b) => pluginPopularity(b) - pluginPopularity(a) || a.name.localeCompare(b.name));
-  const centerNodeId = relationshipId("author", author.name);
+  const centerNodeId = relationshipId("author", author.slug);
 
   addNode(nodes, {
     id: centerNodeId,
     type: "author",
     label: author.name,
-    href: `/authors/${encodeURIComponent(author.name)}`,
+    href: `/authors/${encodeURIComponent(author.slug)}`,
     metric: `${plugins.length.toLocaleString()} plugin${plugins.length === 1 ? "" : "s"}`,
     size: 54,
   });
@@ -287,6 +288,29 @@ export function buildAuthorRelationshipMap(
   }
 
   return relationshipMapResult(centerNodeId, nodes, edges);
+}
+
+function authorRouteKey(name: string, profileUrl?: string) {
+  const profileSlug = authorSlugFromProfileUrl(profileUrl);
+  return profileSlug ?? name;
+}
+
+function authorSlugFromProfileUrl(value: string | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const url = new URL(value);
+
+    if (url.hostname.toLowerCase() !== "profiles.wordpress.org") {
+      return null;
+    }
+
+    return url.pathname.split("/").filter(Boolean)[0]?.toLowerCase() ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function relationshipMapResult(
