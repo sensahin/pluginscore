@@ -41,6 +41,10 @@ import {
 } from "@/lib/plugin-list-utils";
 import { formatPluginDirectoryAge } from "@/lib/plugin-age";
 import {
+  getPluginMaintenanceSignal,
+  type PluginMaintenanceSignal,
+} from "@/lib/plugin-maintenance";
+import {
   buildPluginRelationshipMap,
   type RelationshipIssuePluginGroup,
 } from "@/lib/plugin-relationship-map";
@@ -1249,6 +1253,7 @@ function PluginMetadata({
   const authorHref = plugin.author
     ? `/authors/${encodeURIComponent(plugin.author)}`
     : undefined;
+  const maintenanceSignal = getPluginMaintenanceSignal(plugin);
 
   return (
     <aside className="rounded-md border border-line bg-surface p-5 shadow-sm">
@@ -1264,6 +1269,11 @@ function PluginMetadata({
         <MetaRow
           label="Directory age"
           value={formatPluginDirectoryAge(plugin.addedAt)}
+        />
+        <MetaRow
+          label="Maintenance"
+          value={<MaintenanceValue signal={maintenanceSignal} />}
+          title={maintenanceSignal.title}
         />
         <MetaRow label="Requires WP" value={plugin.requiresWp} />
         <MetaRow label="Tested up to" value={plugin.testedWp} />
@@ -1290,22 +1300,50 @@ function PluginMetadata({
   );
 }
 
+function MaintenanceValue({ signal }: { signal: PluginMaintenanceSignal }) {
+  const toneClass = maintenanceToneClass(signal.tone);
+
+  return (
+    <span className={`inline-flex min-w-0 items-center justify-end gap-1.5 ${toneClass.text}`}>
+      <span className={`size-1.5 shrink-0 rounded-full ${toneClass.dot}`} />
+      <span className="min-w-0 truncate">{signal.label}</span>
+    </span>
+  );
+}
+
+function maintenanceToneClass(tone: PluginMaintenanceSignal["tone"]) {
+  switch (tone) {
+    case "good":
+      return { text: "text-good", dot: "bg-good" };
+    case "info":
+      return { text: "text-info", dot: "bg-info" };
+    case "warn":
+      return { text: "text-warn", dot: "bg-warn" };
+    case "risk":
+      return { text: "text-risk", dot: "bg-risk" };
+    case "muted":
+      return { text: "text-muted", dot: "bg-muted" };
+  }
+}
+
 function MetaRow({
   label,
   value,
   href,
   icon,
+  title: titleOverride,
 }: {
   label: string;
   value?: ReactNode;
   href?: string;
   icon?: ReactNode;
+  title?: string;
 }) {
   if (!value) {
     return null;
   }
 
-  const title = typeof value === "string" ? value : undefined;
+  const title = titleOverride ?? (typeof value === "string" ? value : undefined);
   const content = (
     <span
       className="inline-flex min-w-0 max-w-full items-center justify-end gap-1 text-right text-foreground"
