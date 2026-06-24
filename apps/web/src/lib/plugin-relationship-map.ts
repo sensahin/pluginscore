@@ -429,12 +429,11 @@ function graphDomains(analysis?: ExternalConnectionAnalysisSummary) {
     return [];
   }
 
-  const nonPlatformDomains = analysis.domains.filter((domain) => !isPlatformReferenceDomain(domain));
-  const assetDomains = nonPlatformDomains.filter((domain) => domain.types.includes("external_asset"));
-  const outboundDomains = nonPlatformDomains.filter((domain) => !domain.types.includes("external_asset"));
-  const fallbackDomains = analysis.domains.filter(isPlatformReferenceDomain).slice(0, 4);
-
-  return [...assetDomains, ...outboundDomains, ...fallbackDomains];
+  return analysis.domains.filter(
+    (domain) =>
+      !isPlatformReferenceDomain(domain) &&
+      !domain.types.includes("external_asset"),
+  );
 }
 
 function sharedAuthorTags(plugins: PluginSummary[]) {
