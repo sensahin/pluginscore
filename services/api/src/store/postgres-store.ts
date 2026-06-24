@@ -5,6 +5,8 @@ import type {
   AuthorSummary,
   ExternalConnectionAnalysisMode,
   ExternalConnectionAnalysisSummary,
+  ExternalConnectionDomainSummary,
+  ExternalConnectionFinding,
   ExternalConnectionOperations,
   ExternalConnectionSettings,
   ExternalDomainDetail,
@@ -41,6 +43,7 @@ import {
   enrichIssueSummary,
   getIssueDisplayTitle,
   getIssueEditorial,
+  isExternalDomainLikelyPublicHostname,
   isPlatformReferenceExternalDomain,
   normalizeExternalDomain,
 } from "@pluginscore/core";
@@ -1262,6 +1265,11 @@ export class PostgresStore implements PluginScoreStore {
           and finding_item ? 'domain'
           and coalesce(finding_item->>'domain', '') <> ''
           and finding_item->>'type' in ('outbound_http', 'external_asset')
+      ),
+      public_domain_findings as (
+        select *
+        from domain_findings
+        where ${publicExternalDomainSql("domain")}
       )
       select
         domain,
@@ -1271,7 +1279,7 @@ export class PostgresStore implements PluginScoreStore {
         count(*) filter (where type = 'external_asset')::integer as external_asset_references,
         max(analyzed_at) as last_seen_at,
         min(case confidence when 'high' then 1 when 'medium' then 2 else 3 end)::integer as confidence_rank
-      from domain_findings
+      from public_domain_findings
       group by domain
       having count(distinct plugin_id) >= $2
       order by plugin_count desc, total_references desc, domain asc
@@ -2630,6 +2638,15 @@ function pluginListSelectSql(extraColumn?: string) {
   `;
 }
 
+function publicExternalDomainSql(domainExpression: string) {
+  return `
+      (
+        ${domainExpression} ~ '^[0-9]{1,3}(\\.[0-9]{1,3}){3}$'
+        or ${domainExpression} ~ '^[a-z0-9][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+\\.[a-z]{2,}$'
+      )
+  `;
+}
+
 function pluginTagsSelectSql() {
   return `
       left join lateral (
@@ -2928,7 +2945,9 @@ function confidenceFromRank(rank: number) {
 }
 
 function normalizeExternalDomainForQuery(domain: string) {
-  return normalizeExternalDomain(domain).replace(/[^a-z0-9.-]+/g, "");
+  const normalizedDomain = normalizeExternalDomain(domain).replace(/[^a-z0-9.-]+/g, "");
+
+  return isExternalDomainLikelyPublicHostname(normalizedDomain) ? normalizedDomain : "";
 }
 
 function rowToPluginScoreHistoryPoint(row: Record<string, unknown>) {
@@ -3071,6 +3090,10 @@ function rowToExternalConnectionAnalysis(value: unknown): ExternalConnectionAnal
     return null;
   }
 
+  const domains = record.domains.filter(isPublicExternalConnectionDomain);
+  const findings = record.findings.filter(isPublicExternalConnectionFinding);
+  const endpoints = record.endpoints;
+
   return {
     status: record.status,
     analysisVersion: record.analysisVersion,
@@ -3081,19 +3104,27 @@ function rowToExternalConnectionAnalysis(value: unknown): ExternalConnectionAnal
     filesScanned: Number(record.filesScanned ?? 0),
     bytesScanned: Number(record.bytesScanned ?? 0),
     totals: {
-      domains: Number(record.totals.domains ?? 0),
-      outboundCalls: Number(record.totals.outboundCalls ?? 0),
-      externalAssets: Number(record.totals.externalAssets ?? 0),
-      incomingEndpoints: Number(record.totals.incomingEndpoints ?? 0),
-      findings: Number(record.totals.findings ?? 0),
-      highConfidence: Number(record.totals.highConfidence ?? 0),
-      mediumConfidence: Number(record.totals.mediumConfidence ?? 0),
-      lowConfidence: Number(record.totals.lowConfidence ?? 0),
+      domains: domains.length,
+      outboundCalls: findings.filter((finding) => finding.type === "outbound_http").length,
+      externalAssets: findings.filter((finding) => finding.type === "external_asset").length,
+      incomingEndpoints: endpoints.reduce((sum, endpoint) => sum + Number(endpoint.count ?? 0), 0),
+      findings: findings.length,
+      highConfidence: findings.filter((finding) => finding.confidence === "high").length,
+      mediumConfidence: findings.filter((finding) => finding.confidence === "medium").length,
+      lowConfidence: findings.filter((finding) => finding.confidence === "low").length,
     },
-    domains: record.domains,
-    endpoints: record.endpoints,
-    findings: record.findings,
+    domains,
+    endpoints,
+    findings,
   };
+}
+
+function isPublicExternalConnectionDomain(domain: ExternalConnectionDomainSummary) {
+  return isExternalDomainLikelyPublicHostname(domain.domain);
+}
+
+function isPublicExternalConnectionFinding(finding: ExternalConnectionFinding) {
+  return !finding.domain || isExternalDomainLikelyPublicHostname(finding.domain);
 }
 
 function rowToAuditFindingsRetentionSummary(

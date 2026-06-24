@@ -56,6 +56,7 @@ export type {
   WordPressPluginMetadata,
 } from "./types.js";
 export {
+  isExternalDomainLikelyPublicHostname,
   isPlatformReferenceExternalDomain,
   normalizeExternalDomain,
 } from "./external-domains.js";

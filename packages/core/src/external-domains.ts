@@ -28,3 +28,38 @@ export function isPlatformReferenceExternalDomain(
     (value === "github.com" && confidence === "low")
   );
 }
+
+export function isExternalDomainLikelyPublicHostname(domain: string) {
+  const value = normalizeExternalDomain(domain).replace(/\.$/, "");
+
+  if (!value || value.length > 253 || value.includes("..")) {
+    return false;
+  }
+
+  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(value)) {
+    return value
+      .split(".")
+      .every((segment) => {
+        const number = Number(segment);
+        return Number.isInteger(number) && number >= 0 && number <= 255;
+      });
+  }
+
+  if (!value.includes(".") || /[^a-z0-9.-]/.test(value)) {
+    return false;
+  }
+
+  const labels = value.split(".");
+  const tld = labels.at(-1);
+
+  if (!tld || tld.length < 2 || !/^[a-z]+$/.test(tld)) {
+    return false;
+  }
+
+  return labels.every(
+    (label) =>
+      label.length > 0 &&
+      label.length <= 63 &&
+      /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label),
+  );
+}

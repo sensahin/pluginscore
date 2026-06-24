@@ -5,6 +5,7 @@ import type {
   ExternalConnectionFinding,
   ExternalConnectionType,
 } from "@pluginscore/core";
+import { isExternalDomainLikelyPublicHostname } from "@pluginscore/core";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { extname, join, relative, sep } from "node:path";
 
@@ -486,7 +487,7 @@ function normalizeUrl(rawValue: string | undefined) {
     }
 
     const domain = parsed.hostname.toLowerCase().replace(/^www\./, "");
-    if (!domain || ignoredDomains.has(domain)) {
+    if (!domain || ignoredDomains.has(domain) || !isExternalDomainLikelyPublicHostname(domain)) {
       return null;
     }
 
