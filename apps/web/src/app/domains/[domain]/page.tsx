@@ -7,7 +7,7 @@ import type {
 import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Boxes, Globe2, Network, PackageSearch } from "lucide-react";
+import { Boxes, ExternalLink, Globe2, Network, PackageSearch } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { PluginIcon } from "@/components/plugin-icon";
 import { RelativeDate } from "@/components/relative-date";
@@ -73,15 +73,30 @@ export default async function DomainPage({ params }: DomainPageProps) {
   const assetPlugins = detail.plugins.filter((item) =>
     item.referenceTypes.includes("external_asset"),
   );
+  const externalDomainUrl = domainExternalUrl(detail.domain);
 
   return (
     <AppShell>
       <section className="rounded-md border border-line bg-surface">
         <div className="flex flex-col gap-4 border-b border-line p-5 md:flex-row md:items-start md:justify-between">
           <div className="min-w-0">
-            <h1 className="break-all font-mono text-3xl font-semibold tracking-normal">
-              {detail.domain}
-            </h1>
+            <div className="flex min-w-0 items-start gap-2">
+              <h1 className="break-all font-mono text-3xl font-semibold tracking-normal">
+                {detail.domain}
+              </h1>
+              {externalDomainUrl ? (
+                <a
+                  href={externalDomainUrl}
+                  target="_blank"
+                  rel="nofollow noopener noreferrer"
+                  aria-label={`Open ${detail.domain}`}
+                  title={`Open ${detail.domain}`}
+                  className="mt-1.5 shrink-0 rounded-md p-1 text-muted transition hover:bg-surface-subtle hover:text-foreground"
+                >
+                  <ExternalLink size={18} aria-hidden="true" />
+                </a>
+              ) : null}
+            </div>
             <p className="mt-2 max-w-3xl text-sm text-muted">
               Potential connections found by static code analysis.
             </p>
@@ -193,6 +208,31 @@ export default async function DomainPage({ params }: DomainPageProps) {
       </section>
     </AppShell>
   );
+}
+
+function domainExternalUrl(domain: string) {
+  const normalizedDomain = domain.trim().toLowerCase().replace(/\.$/, "");
+
+  if (
+    !normalizedDomain ||
+    /[\s/:@]/.test(normalizedDomain) ||
+    normalizedDomain.startsWith(".") ||
+    normalizedDomain.endsWith(".")
+  ) {
+    return undefined;
+  }
+
+  try {
+    const url = new URL(`https://${normalizedDomain}`);
+
+    if (url.hostname !== normalizedDomain) {
+      return undefined;
+    }
+
+    return `https://${normalizedDomain}`;
+  } catch {
+    return undefined;
+  }
 }
 
 function DomainMetric({
