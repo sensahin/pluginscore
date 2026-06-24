@@ -169,8 +169,19 @@ export type ExternalConnectionAnalysisSummary = {
   findings: ExternalConnectionFinding[];
 };
 
+export type ExternalDomainClassification =
+  | "standard"
+  | "platform_reference"
+  | "placeholder"
+  | "invalid";
+
+export type ExternalDomainScope = "exact" | "family";
+
 export type ExternalDomainSummary = {
   domain: string;
+  rootDomain: string;
+  isSubdomain: boolean;
+  classification: ExternalDomainClassification;
   pluginCount: number;
   totalReferences: number;
   outboundReferences: number;
@@ -180,10 +191,25 @@ export type ExternalDomainSummary = {
   platformReference: boolean;
 };
 
+export type ExternalDomainFamilySummary = {
+  rootDomain: string;
+  domainCount: number;
+  pluginCount: number;
+  totalReferences: number;
+  outboundReferences: number;
+  externalAssetReferences: number;
+  lastSeenAt?: string;
+  confidence: ExternalConnectionConfidence;
+  classification: ExternalDomainClassification;
+  platformReference: boolean;
+  domains: ExternalDomainSummary[];
+};
+
 export type ExternalDomainPluginSummary = {
   plugin: PluginSummary;
   pluginVersion: string;
   analyzedAt: string;
+  referencedDomains: string[];
   referenceCount: number;
   referenceTypes: ExternalConnectionType[];
   outboundReferences: number;
@@ -192,6 +218,9 @@ export type ExternalDomainPluginSummary = {
 };
 
 export type ExternalDomainDetail = ExternalDomainSummary & {
+  scope: ExternalDomainScope;
+  requestedDomain: string;
+  domains: ExternalDomainSummary[];
   plugins: ExternalDomainPluginSummary[];
 };
 

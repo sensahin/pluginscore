@@ -515,6 +515,10 @@ export class MemoryStore implements PluginScoreStore {
     return [];
   }
 
+  async listExternalDomainFamilies() {
+    return [];
+  }
+
   async getExternalDomain() {
     return null;
   }

@@ -3,6 +3,13 @@ import type {
   ExternalDomainPluginSummary,
   ExternalDomainSummary,
   ExternalConnectionType,
+  ExternalDomainScope,
+} from "@pluginscore/core";
+import {
+  externalDomainClassification,
+  externalDomainRoot,
+  isPlainExternalHostname,
+  normalizeExternalDomain,
 } from "@pluginscore/core";
 import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
@@ -12,7 +19,7 @@ import { AppShell } from "@/components/app-shell";
 import { PluginIcon } from "@/components/plugin-icon";
 import { RelativeDate } from "@/components/relative-date";
 import { ScoreBadge } from "@/components/score-badge";
-import { getExternalDomain, getExternalDomains } from "@/lib/api";
+import { getExternalDomain, getExternalDomainFamilies } from "@/lib/api";
 import { seoMetadata } from "@/lib/seo";
 
 const INDEXABLE_DOMAIN_PLUGIN_MINIMUM = 3;
@@ -24,11 +31,24 @@ type DomainPageProps = {
 export const revalidate = 1_800;
 
 export async function generateStaticParams() {
-  const domains = await getExternalDomains(100, INDEXABLE_DOMAIN_PLUGIN_MINIMUM);
+  const families = await getExternalDomainFamilies(100, INDEXABLE_DOMAIN_PLUGIN_MINIMUM);
+  const params = new Set<string>();
 
-  return domains
-    .filter((domain) => !domain.platformReference)
-    .map((domain) => ({ domain: domain.domain }));
+  for (const family of families) {
+    if (family.classification !== "standard") {
+      continue;
+    }
+
+    params.add(family.rootDomain);
+
+    for (const domain of family.domains.slice(0, 5)) {
+      if (domain.classification === "standard") {
+        params.add(domain.domain);
+      }
+    }
+  }
+
+  return [...params].map((domain) => ({ domain }));
 }
 
 export async function generateMetadata({
@@ -36,19 +56,26 @@ export async function generateMetadata({
 }: DomainPageProps): Promise<Metadata> {
   const { domain } = await params;
   const decodedDomain = decodeURIComponent(domain);
-  const detail = await getExternalDomain(decodedDomain, 100);
+  const scope = domainPageScope(decodedDomain);
+  const detail = await getExternalDomain(decodedDomain, 100, scope);
   const displayDomain = detail?.domain ?? decodedDomain;
   const description =
-    `WordPress plugins that reference ${displayDomain}, including outbound calls, external assets, and static analysis context from PluginScore.`;
+    detail?.scope === "family"
+      ? `WordPress plugins that reference ${displayDomain} and its detected subdomains, including outbound calls, external assets, and static analysis context from PluginScore.`
+      : `WordPress plugins that reference ${displayDomain}, including outbound calls, external assets, and static analysis context from PluginScore.`;
   const shouldIndex = Boolean(
     detail &&
       detail.pluginCount >= INDEXABLE_DOMAIN_PLUGIN_MINIMUM &&
+      detail.classification === "standard" &&
       !detail.platformReference,
   );
 
   return {
     ...seoMetadata({
-      title: `${displayDomain} in WordPress Plugins`,
+      title:
+        detail?.scope === "family"
+          ? `${displayDomain} Domain Family in WordPress Plugins`
+          : `${displayDomain} in WordPress Plugins`,
       description,
       path: `/domains/${encodeURIComponent(displayDomain)}`,
     }),
@@ -61,7 +88,9 @@ export async function generateMetadata({
 
 export default async function DomainPage({ params }: DomainPageProps) {
   const { domain } = await params;
-  const detail = await getExternalDomain(decodeURIComponent(domain), 100);
+  const decodedDomain = decodeURIComponent(domain);
+  const scope = domainPageScope(decodedDomain);
+  const detail = await getExternalDomain(decodedDomain, 100, scope);
 
   if (!detail) {
     notFound();
@@ -74,6 +103,7 @@ export default async function DomainPage({ params }: DomainPageProps) {
     item.referenceTypes.includes("external_asset"),
   );
   const externalDomainUrl = domainExternalUrl(detail.domain);
+  const isFamilyPage = detail.scope === "family";
 
   return (
     <AppShell>
@@ -98,22 +128,47 @@ export default async function DomainPage({ params }: DomainPageProps) {
               ) : null}
             </div>
             <p className="mt-2 max-w-3xl text-sm text-muted">
-              Potential connections found by static code analysis.
+              {isFamilyPage
+                ? `Potential connections found across ${detail.domains.length.toLocaleString()} detected domains in this family.`
+                : "Potential connections found by static code analysis."}
             </p>
+            {!isFamilyPage && detail.isSubdomain ? (
+              <Link
+                href={`/domains/${encodeURIComponent(detail.rootDomain)}`}
+                className="mt-3 inline-flex w-fit font-mono text-xs text-muted transition hover:text-foreground"
+              >
+                Part of {detail.rootDomain}
+              </Link>
+            ) : null}
           </div>
           {detail.platformReference ? (
             <span className="inline-flex w-fit rounded-md border border-line px-3 py-2 text-xs font-medium text-muted">
               Platform / reference
             </span>
+          ) : detail.classification === "placeholder" || detail.classification === "invalid" ? (
+            <span className="inline-flex w-fit rounded-md border border-line px-3 py-2 text-xs font-medium text-muted">
+              Cleanup
+            </span>
           ) : null}
         </div>
 
-        <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-4">
+        <div
+          className={`grid gap-3 p-5 sm:grid-cols-2 ${
+            isFamilyPage ? "lg:grid-cols-5" : "lg:grid-cols-4"
+          }`}
+        >
           <DomainMetric
             icon={<PackageSearch size={16} aria-hidden="true" />}
             label="Plugins detected"
             value={detail.pluginCount.toLocaleString()}
           />
+          {isFamilyPage ? (
+            <DomainMetric
+              icon={<Globe2 size={16} aria-hidden="true" />}
+              label="Domains"
+              value={detail.domains.length.toLocaleString()}
+            />
+          ) : null}
           <DomainMetric
             icon={<Network size={16} aria-hidden="true" />}
             label="Outbound references"
@@ -132,6 +187,10 @@ export default async function DomainPage({ params }: DomainPageProps) {
         </div>
       </section>
 
+      {isFamilyPage && detail.domains.length > 1 ? (
+        <DomainFamilyMembers domains={detail.domains} />
+      ) : null}
+
       <DomainCategorySplit
         outboundPlugins={outboundPlugins}
         assetPlugins={assetPlugins}
@@ -140,7 +199,11 @@ export default async function DomainPage({ params }: DomainPageProps) {
 
       <section className="rounded-md border border-line bg-surface">
         <div className="border-b border-line p-5">
-          <h2 className="text-xl font-semibold">Plugins Referencing This Domain</h2>
+          <h2 className="text-xl font-semibold">
+            {isFamilyPage
+              ? "Plugins Referencing This Domain Family"
+              : "Plugins Referencing This Domain"}
+          </h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[980px] border-collapse text-sm">
@@ -195,7 +258,13 @@ export default async function DomainPage({ params }: DomainPageProps) {
                     {item.referenceCount.toLocaleString()}
                   </td>
                   <td className="px-4 py-4 text-muted">
-                    {referenceTypeLabel(item.referenceTypes)}
+                    <span>{referenceTypeLabel(item.referenceTypes)}</span>
+                    {isFamilyPage && item.referencedDomains.length ? (
+                      <p className="mt-1 max-w-[26ch] truncate font-mono text-[11px] text-muted">
+                        {item.referencedDomains.slice(0, 3).join(", ")}
+                        {item.referencedDomains.length > 3 ? " +" : ""}
+                      </p>
+                    ) : null}
                   </td>
                   <td className="whitespace-nowrap px-4 py-4 text-right text-xs text-muted">
                     <RelativeDate value={item.analyzedAt} fallback="-" />
@@ -211,13 +280,13 @@ export default async function DomainPage({ params }: DomainPageProps) {
 }
 
 function domainExternalUrl(domain: string) {
-  const normalizedDomain = domain.trim().toLowerCase().replace(/\.$/, "");
+  const normalizedDomain = normalizeExternalDomain(domain);
+  const classification = externalDomainClassification(normalizedDomain);
 
   if (
-    !normalizedDomain ||
-    /[\s/:@]/.test(normalizedDomain) ||
-    normalizedDomain.startsWith(".") ||
-    normalizedDomain.endsWith(".")
+    !isPlainExternalHostname(normalizedDomain) ||
+    classification === "placeholder" ||
+    classification === "invalid"
   ) {
     return undefined;
   }
@@ -233,6 +302,16 @@ function domainExternalUrl(domain: string) {
   } catch {
     return undefined;
   }
+}
+
+function domainPageScope(domain: string): ExternalDomainScope {
+  const normalizedDomain = normalizeExternalDomain(domain);
+
+  if (!isPlainExternalHostname(normalizedDomain)) {
+    return "exact";
+  }
+
+  return externalDomainRoot(normalizedDomain) === normalizedDomain ? "family" : "exact";
 }
 
 function DomainMetric({
@@ -252,6 +331,59 @@ function DomainMetric({
       </div>
       <div className="mt-2 font-mono text-xl font-semibold text-foreground">{value}</div>
     </div>
+  );
+}
+
+function DomainFamilyMembers({ domains }: { domains: ExternalDomainSummary[] }) {
+  return (
+    <section className="rounded-md border border-line bg-surface">
+      <div className="border-b border-line p-5">
+        <h2 className="text-xl font-semibold">Domains in This Family</h2>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-line text-left text-xs text-muted">
+              <th className="px-4 py-3 font-medium">Domain</th>
+              <th className="px-4 py-3 text-right font-medium">Plugins</th>
+              <th className="px-4 py-3 text-right font-medium">References</th>
+              <th className="px-4 py-3 text-right font-medium">Outbound</th>
+              <th className="px-4 py-3 text-right font-medium">Assets</th>
+            </tr>
+          </thead>
+          <tbody>
+            {domains.map((domain) => (
+              <tr
+                key={domain.domain}
+                className="border-b border-line last:border-b-0 transition hover:bg-surface-subtle/70"
+              >
+                <td className="px-4 py-4">
+                  <Link
+                    href={`/domains/${encodeURIComponent(domain.domain)}`}
+                    className="inline-flex max-w-[44ch] items-center gap-2 truncate font-mono font-medium text-info hover:text-foreground"
+                  >
+                    <Globe2 size={15} className="shrink-0" aria-hidden="true" />
+                    <span className="truncate">{domain.domain}</span>
+                  </Link>
+                </td>
+                <td className="px-4 py-4 text-right font-mono">
+                  {domain.pluginCount.toLocaleString()}
+                </td>
+                <td className="px-4 py-4 text-right font-mono">
+                  {domain.totalReferences.toLocaleString()}
+                </td>
+                <td className="px-4 py-4 text-right font-mono">
+                  {domain.outboundReferences.toLocaleString()}
+                </td>
+                <td className="px-4 py-4 text-right font-mono">
+                  {domain.externalAssetReferences.toLocaleString()}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 
