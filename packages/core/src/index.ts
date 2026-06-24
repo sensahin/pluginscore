@@ -14,6 +14,9 @@ export type {
   ExternalConnectionOperations,
   ExternalConnectionSettings,
   ExternalConnectionType,
+  ExternalDomainDetail,
+  ExternalDomainPluginSummary,
+  ExternalDomainSummary,
   FindingCodeCount,
   IssueSummary,
   IssueEditorial,
@@ -52,6 +55,10 @@ export type {
   TrackedPluginSummary,
   WordPressPluginMetadata,
 } from "./types.js";
+export {
+  isPlatformReferenceExternalDomain,
+  normalizeExternalDomain,
+} from "./external-domains.js";
 export {
   enrichIssueSummary,
   getIssueDisplayTitle,

@@ -5,6 +5,8 @@ import type {
   AuthorSummary,
   ExternalConnectionAnalysisMode,
   ExternalConnectionOperations,
+  ExternalDomainDetail,
+  ExternalDomainSummary,
   IssueSummary,
   OperationsSummary,
   PaginatedResult,
@@ -188,6 +190,20 @@ export async function getTags(limit = 100, minimumPlugins = 1) {
   return fetchFromApi<TagSummary[]>(
     `/tags?limit=${limit}&minimumPlugins=${minimumPlugins}`,
     sampleTags(limit, minimumPlugins),
+  );
+}
+
+export async function getExternalDomains(limit = 100, minimumPlugins = 1) {
+  return fetchFromApi<ExternalDomainSummary[]>(
+    `/domains?limit=${limit}&minimumPlugins=${minimumPlugins}`,
+    [],
+  );
+}
+
+export async function getExternalDomain(domain: string, limit = 100) {
+  return fetchFromApi<ExternalDomainDetail | null>(
+    `/domains/${encodeURIComponent(domain)}?limit=${limit}`,
+    null,
   );
 }
 

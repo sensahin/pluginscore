@@ -6,6 +6,7 @@ import type {
   PluginDetail,
   PluginScoreHistoryPoint,
 } from "@pluginscore/core";
+import { isPlatformReferenceExternalDomain } from "@pluginscore/core";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import {
@@ -810,7 +811,12 @@ function ExternalConnections({ plugin }: { plugin: PluginDetail }) {
 function DomainRow({ domain }: { domain: ExternalConnectionDomainSummary }) {
   return (
     <div className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-      <span className="min-w-0 truncate font-mono">{domain.domain}</span>
+      <Link
+        href={`/domains/${encodeURIComponent(domain.domain)}`}
+        className="min-w-0 truncate font-mono text-info hover:text-foreground"
+      >
+        {domain.domain}
+      </Link>
       <span className="shrink-0 text-xs text-muted">
         {domain.count.toLocaleString()} · {domainTypeLabel(domain)}
       </span>
@@ -843,25 +849,7 @@ function EndpointRow({ endpoint }: { endpoint: ExternalConnectionEndpointSummary
 }
 
 function isPlatformReferenceDomain(domain: ExternalConnectionDomainSummary) {
-  const value = normalizeConnectionDomain(domain.domain);
-
-  return (
-    value === "wordpress.org" ||
-    value.endsWith(".wordpress.org") ||
-    value === "w.org" ||
-    value.endsWith(".w.org") ||
-    value === "w3.org" ||
-    value.endsWith(".w3.org") ||
-    value === "schema.org" ||
-    value.endsWith(".schema.org") ||
-    value === "gnu.org" ||
-    value.endsWith(".gnu.org") ||
-    value === "fsf.org" ||
-    value.endsWith(".fsf.org") ||
-    value === "opensource.org" ||
-    value.endsWith(".opensource.org") ||
-    (value === "github.com" && domain.confidence === "low")
-  );
+  return isPlatformReferenceExternalDomain(domain.domain, domain.confidence);
 }
 
 function isExternalAssetDomain(domain: ExternalConnectionDomainSummary) {
@@ -925,9 +913,6 @@ function endpointExposureLabel(endpoint: ExternalConnectionEndpointSummary) {
   return endpoint.exposure;
 }
 
-function normalizeConnectionDomain(domain: string) {
-  return domain.toLowerCase().replace(/^www\./, "");
-}
 
 function ConnectionMetric({ label, value }: { label: string; value: number }) {
   return (

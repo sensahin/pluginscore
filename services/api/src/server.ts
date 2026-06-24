@@ -83,6 +83,15 @@ const listTagsQuery = z.object({
   minimumPlugins: z.coerce.number().int().min(1).max(100).default(1),
 });
 
+const listExternalDomainsQuery = z.object({
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+  minimumPlugins: z.coerce.number().int().min(1).max(100).default(1),
+});
+
+const externalDomainDetailQuery = z.object({
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+});
+
 const tagDetailQuery = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(100),
   sort: z
@@ -507,6 +516,23 @@ export async function createServer(config: ApiConfig, store: PluginScoreStore) {
 
     if (!result) {
       return reply.code(404).send({ error: "tag_not_found" });
+    }
+
+    return result;
+  });
+
+  app.get("/domains", async (request) => {
+    const query = listExternalDomainsQuery.parse(request.query);
+    return store.listExternalDomains(query);
+  });
+
+  app.get("/domains/:domain", async (request, reply) => {
+    const { domain } = z.object({ domain: z.string().min(1).max(255) }).parse(request.params);
+    const query = externalDomainDetailQuery.parse(request.query);
+    const result = await store.getExternalDomain(decodeURIComponent(domain), query);
+
+    if (!result) {
+      return reply.code(404).send({ error: "external_domain_not_found" });
     }
 
     return result;

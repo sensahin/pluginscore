@@ -7,6 +7,7 @@ import type {
   PluginSummary,
   ScoreBand,
 } from "@pluginscore/core";
+import { isPlatformReferenceExternalDomain } from "@pluginscore/core";
 
 export type RelationshipNodeType =
   | "plugin"
@@ -134,8 +135,7 @@ export function buildPluginRelationshipMap(
       id: nodeId,
       type: "domain",
       label: domain.domain,
-      href: `https://${domain.domain}`,
-      external: true,
+      href: `/domains/${encodeURIComponent(domain.domain)}`,
       metric: `${domain.count.toLocaleString()} signal${domain.count === 1 ? "" : "s"}`,
       size: domain.types.includes("external_asset") ? 32 : 28,
     })) {
@@ -452,25 +452,7 @@ function sharedAuthorTags(plugins: PluginSummary[]) {
 }
 
 function isPlatformReferenceDomain(domain: ExternalConnectionDomainSummary) {
-  const value = domain.domain.toLowerCase().replace(/^www\./, "");
-
-  return (
-    value === "wordpress.org" ||
-    value.endsWith(".wordpress.org") ||
-    value === "w.org" ||
-    value.endsWith(".w.org") ||
-    value === "w3.org" ||
-    value.endsWith(".w3.org") ||
-    value === "schema.org" ||
-    value.endsWith(".schema.org") ||
-    value === "gnu.org" ||
-    value.endsWith(".gnu.org") ||
-    value === "fsf.org" ||
-    value.endsWith(".fsf.org") ||
-    value === "opensource.org" ||
-    value.endsWith(".opensource.org") ||
-    (value === "github.com" && domain.confidence === "low")
-  );
+  return isPlatformReferenceExternalDomain(domain.domain, domain.confidence);
 }
 
 function pluginNodeSize(plugin: Pick<PluginSummary, "score" | "activeInstalls">, isCenter: boolean) {

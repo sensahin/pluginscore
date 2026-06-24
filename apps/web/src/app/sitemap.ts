@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { getAuthors, getTags } from "@/lib/api";
+import { getAuthors, getExternalDomains, getTags } from "@/lib/api";
 import { issues, plugins } from "@/lib/plugin-score-data";
 import { slugifyLabel } from "@/lib/route-utils";
 
@@ -7,9 +7,10 @@ export const revalidate = 3_600;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
-  const [authors, tags] = await Promise.all([
+  const [authors, tags, domains] = await Promise.all([
     getAuthors(150),
     getTags(150, 3),
+    getExternalDomains(150, 3),
   ]);
   const rankingRoutes = [
     "/rankings/best",
@@ -39,6 +40,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     "/about",
     "/authors",
     "/compare",
+    "/domains",
     "/issues",
     "/rankings",
     "/tags",
@@ -90,5 +92,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ];
   });
 
-  return [...routes, ...pluginRoutes, ...issueRoutes, ...authorRoutes, ...tagRoutes];
+  const domainRoutes = domains
+    .filter((domain) => !domain.platformReference)
+    .map((domain) => ({
+      url: `https://pluginscore.com/domains/${encodeURIComponent(domain.domain)}`,
+      lastModified: domain.lastSeenAt ? new Date(domain.lastSeenAt) : now,
+    }));
+
+  return [
+    ...routes,
+    ...pluginRoutes,
+    ...issueRoutes,
+    ...authorRoutes,
+    ...tagRoutes,
+    ...domainRoutes,
+  ];
 }

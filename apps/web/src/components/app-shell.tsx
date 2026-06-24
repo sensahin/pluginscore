@@ -60,6 +60,9 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
             <Link href="/issues" className="hover:text-foreground">
               Issues
             </Link>
+            <Link href="/domains" className="hover:text-foreground">
+              External Domains
+            </Link>
             <Link href="/methodology" className="hover:text-foreground">
               Methodology
             </Link>

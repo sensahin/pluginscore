@@ -169,6 +169,32 @@ export type ExternalConnectionAnalysisSummary = {
   findings: ExternalConnectionFinding[];
 };
 
+export type ExternalDomainSummary = {
+  domain: string;
+  pluginCount: number;
+  totalReferences: number;
+  outboundReferences: number;
+  externalAssetReferences: number;
+  lastSeenAt?: string;
+  confidence: ExternalConnectionConfidence;
+  platformReference: boolean;
+};
+
+export type ExternalDomainPluginSummary = {
+  plugin: PluginSummary;
+  pluginVersion: string;
+  analyzedAt: string;
+  referenceCount: number;
+  referenceTypes: ExternalConnectionType[];
+  outboundReferences: number;
+  externalAssetReferences: number;
+  sampleUrls: string[];
+};
+
+export type ExternalDomainDetail = ExternalDomainSummary & {
+  plugins: ExternalDomainPluginSummary[];
+};
+
 export type PluginDetail = PluginSummary & {
   scores?: ScoreBreakdown;
   rankings?: PluginRankings;

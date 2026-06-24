@@ -7,6 +7,9 @@ import type {
   ExternalConnectionAnalysisSummary,
   ExternalConnectionOperations,
   ExternalConnectionSettings,
+  ExternalDomainDetail,
+  ExternalDomainPluginSummary,
+  ExternalDomainSummary,
   IssueSummary,
   PaginatedResult,
   AuditRunSummary,
@@ -34,7 +37,13 @@ import type {
   TagSummary,
   TrackedPluginSummary,
 } from "@pluginscore/core";
-import { enrichIssueSummary, getIssueDisplayTitle, getIssueEditorial } from "@pluginscore/core";
+import {
+  enrichIssueSummary,
+  getIssueDisplayTitle,
+  getIssueEditorial,
+  isPlatformReferenceExternalDomain,
+  normalizeExternalDomain,
+} from "@pluginscore/core";
 import {
   SCORING_MODEL_VERSION,
   familyWeights,
@@ -46,7 +55,9 @@ import { Pool, type PoolClient } from "pg";
 import type {
   EnqueueJobInput,
   ExternalConnectionSettingsInput,
+  GetExternalDomainOptions,
   ListAuthorsOptions,
+  ListExternalDomainsOptions,
   ListQueueOptions,
   ListPluginReportsOptions,
   ListRecentSearchesOptions,
@@ -1232,6 +1243,144 @@ export class PostgresStore implements PluginScoreStore {
     return {
       ...rowToTagSummary(tagRow),
       plugins: pluginResult.rows.map(rowToPluginSummary),
+    };
+  }
+
+  async listExternalDomains(options: ListExternalDomainsOptions): Promise<ExternalDomainSummary[]> {
+    const result = await this.pool.query(
+      `
+      with domain_findings as (
+        select
+          regexp_replace(lower(finding_item->>'domain'), '^www\\.', '') as domain,
+          eca.plugin_id,
+          eca.analyzed_at,
+          finding_item->>'type' as type,
+          finding_item->>'confidence' as confidence
+        from external_connection_analyses eca
+        cross join lateral jsonb_array_elements(coalesce(eca.summary_json->'findings', '[]'::jsonb)) finding_item
+        where eca.status = 'complete'
+          and finding_item ? 'domain'
+          and coalesce(finding_item->>'domain', '') <> ''
+          and finding_item->>'type' in ('outbound_http', 'external_asset')
+      )
+      select
+        domain,
+        count(distinct plugin_id)::integer as plugin_count,
+        count(*)::integer as total_references,
+        count(*) filter (where type = 'outbound_http')::integer as outbound_references,
+        count(*) filter (where type = 'external_asset')::integer as external_asset_references,
+        max(analyzed_at) as last_seen_at,
+        min(case confidence when 'high' then 1 when 'medium' then 2 else 3 end)::integer as confidence_rank
+      from domain_findings
+      group by domain
+      having count(distinct plugin_id) >= $2
+      order by plugin_count desc, total_references desc, domain asc
+      limit $1
+      `,
+      [options.limit, options.minimumPlugins ?? 1],
+    );
+
+    return result.rows.map(rowToExternalDomainSummary);
+  }
+
+  async getExternalDomain(domain: string, options: GetExternalDomainOptions): Promise<ExternalDomainDetail | null> {
+    const normalizedDomain = normalizeExternalDomainForQuery(domain);
+
+    if (!normalizedDomain) {
+      return null;
+    }
+
+    const summaryResult = await this.pool.query(
+      `
+      with domain_findings as (
+        select
+          regexp_replace(lower(finding_item->>'domain'), '^www\\.', '') as domain,
+          eca.plugin_id,
+          eca.analyzed_at,
+          finding_item->>'type' as type,
+          finding_item->>'confidence' as confidence
+        from external_connection_analyses eca
+        cross join lateral jsonb_array_elements(coalesce(eca.summary_json->'findings', '[]'::jsonb)) finding_item
+        where eca.status = 'complete'
+          and finding_item ? 'domain'
+          and regexp_replace(lower(finding_item->>'domain'), '^www\\.', '') = $1
+          and finding_item->>'type' in ('outbound_http', 'external_asset')
+      )
+      select
+        domain,
+        count(distinct plugin_id)::integer as plugin_count,
+        count(*)::integer as total_references,
+        count(*) filter (where type = 'outbound_http')::integer as outbound_references,
+        count(*) filter (where type = 'external_asset')::integer as external_asset_references,
+        max(analyzed_at) as last_seen_at,
+        min(case confidence when 'high' then 1 when 'medium' then 2 else 3 end)::integer as confidence_rank
+      from domain_findings
+      group by domain
+      limit 1
+      `,
+      [normalizedDomain],
+    );
+    const summary = summaryResult.rows[0]
+      ? rowToExternalDomainSummary(summaryResult.rows[0])
+      : null;
+
+    if (!summary) {
+      return null;
+    }
+
+    const pluginResult = await this.pool.query(
+      `
+      with domain_plugin_refs as (
+        select
+          eca.plugin_id,
+          count(*)::integer as domain_reference_count,
+          count(*) filter (where finding_item->>'type' = 'outbound_http')::integer as domain_outbound_references,
+          count(*) filter (where finding_item->>'type' = 'external_asset')::integer as domain_external_asset_references,
+          array_remove(array_agg(distinct finding_item->>'type'), null) as domain_reference_types,
+          max(eca.plugin_version) as domain_plugin_version,
+          max(eca.analyzed_at) as domain_analyzed_at
+        from external_connection_analyses eca
+        cross join lateral jsonb_array_elements(coalesce(eca.summary_json->'findings', '[]'::jsonb)) finding_item
+        where eca.status = 'complete'
+          and finding_item ? 'domain'
+          and regexp_replace(lower(finding_item->>'domain'), '^www\\.', '') = $1
+          and finding_item->>'type' in ('outbound_http', 'external_asset')
+        group by eca.plugin_id
+      ),
+      domain_samples as (
+        select distinct on (eca.plugin_id)
+          eca.plugin_id,
+          domain_item->'sampleUrls' as domain_sample_urls
+        from external_connection_analyses eca
+        cross join lateral jsonb_array_elements(coalesce(eca.summary_json->'domains', '[]'::jsonb)) domain_item
+        where eca.status = 'complete'
+          and domain_item ? 'domain'
+          and regexp_replace(lower(domain_item->>'domain'), '^www\\.', '') = $1
+        order by eca.plugin_id, eca.analyzed_at desc
+      )
+      ${pluginListSelectSql(`
+        dpr.domain_plugin_version,
+        dpr.domain_analyzed_at,
+        dpr.domain_reference_count,
+        dpr.domain_outbound_references,
+        dpr.domain_external_asset_references,
+        dpr.domain_reference_types,
+        coalesce(ds.domain_sample_urls, '[]'::jsonb) as domain_sample_urls
+      `)}
+      from domain_plugin_refs dpr
+      join plugins p on p.id = dpr.plugin_id
+      left join plugin_current_scores pcs on pcs.plugin_id = p.id
+      left join domain_samples ds on ds.plugin_id = p.id
+      ${pluginTagsSelectSql()}
+      order by coalesce(p.active_installs, 0) desc, p.slug asc
+      limit $2
+      `,
+      [normalizedDomain, options.limit],
+    );
+
+    return {
+      ...summary,
+      plugins: pluginResult.rows.map(rowToExternalDomainPluginSummary),
     };
   }
 
@@ -2705,6 +2854,81 @@ function rowToPluginSummary(row: Record<string, unknown>): PluginSummary {
     audited: optionalNumber(row.audit_run_id) !== undefined,
     tags: rowToPluginTags(row.tags),
   };
+}
+
+function rowToExternalDomainSummary(row: Record<string, unknown>): ExternalDomainSummary {
+  const domain = normalizeExternalDomain(String(row.domain ?? ""));
+  const confidence = confidenceFromRank(Number(row.confidence_rank ?? 3));
+
+  return {
+    domain,
+    pluginCount: Number(row.plugin_count ?? 0),
+    totalReferences: Number(row.total_references ?? 0),
+    outboundReferences: Number(row.outbound_references ?? 0),
+    externalAssetReferences: Number(row.external_asset_references ?? 0),
+    lastSeenAt: optionalIsoDate(row.last_seen_at),
+    confidence,
+    platformReference: isPlatformReferenceExternalDomain(domain, confidence),
+  };
+}
+
+function rowToExternalDomainPluginSummary(row: Record<string, unknown>): ExternalDomainPluginSummary {
+  const referenceTypes = rowToExternalConnectionTypes(row.domain_reference_types);
+
+  return {
+    plugin: rowToPluginSummary(row),
+    pluginVersion: String(row.domain_plugin_version ?? row.current_version ?? "unknown"),
+    analyzedAt: optionalIsoDate(row.domain_analyzed_at) ?? new Date().toISOString(),
+    referenceCount: Number(row.domain_reference_count ?? 0),
+    referenceTypes,
+    outboundReferences: Number(row.domain_outbound_references ?? 0),
+    externalAssetReferences: Number(row.domain_external_asset_references ?? 0),
+    sampleUrls: rowToStringArray(row.domain_sample_urls).slice(0, 5),
+  };
+}
+
+function rowToExternalConnectionTypes(value: unknown): ExternalDomainPluginSummary["referenceTypes"] {
+  return rowToStringArray(value).filter(
+    (type): type is ExternalDomainPluginSummary["referenceTypes"][number] =>
+      type === "outbound_http" || type === "external_asset" || type === "incoming_endpoint",
+  );
+}
+
+function rowToStringArray(value: unknown): string[] {
+  if (!value) {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === "string");
+  }
+
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return rowToStringArray(parsed);
+    } catch {
+      return [];
+    }
+  }
+
+  return [];
+}
+
+function confidenceFromRank(rank: number) {
+  if (rank <= 1) {
+    return "high";
+  }
+
+  if (rank === 2) {
+    return "medium";
+  }
+
+  return "low";
+}
+
+function normalizeExternalDomainForQuery(domain: string) {
+  return normalizeExternalDomain(domain).replace(/[^a-z0-9.-]+/g, "");
 }
 
 function rowToPluginScoreHistoryPoint(row: Record<string, unknown>) {

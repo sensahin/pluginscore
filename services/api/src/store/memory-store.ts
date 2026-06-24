@@ -511,6 +511,14 @@ export class MemoryStore implements PluginScoreStore {
     };
   }
 
+  async listExternalDomains() {
+    return [];
+  }
+
+  async getExternalDomain() {
+    return null;
+  }
+
   async listQueue(options: ListQueueOptions) {
     if (this.jobs.length === 0) {
       return sampleQueue.slice(0, options.limit);

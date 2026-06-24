@@ -4,6 +4,8 @@ import type {
   AuthorDetail,
   AuthorSummary,
   ExternalConnectionAnalysisMode,
+  ExternalDomainDetail,
+  ExternalDomainSummary,
   ExternalConnectionOperations,
   IssueSummary,
   OperationsSummary,
@@ -86,6 +88,15 @@ export type ListTagsOptions = {
   minimumPlugins?: number;
 };
 
+export type ListExternalDomainsOptions = {
+  limit: number;
+  minimumPlugins?: number;
+};
+
+export type GetExternalDomainOptions = {
+  limit: number;
+};
+
 export type GetTagOptions = {
   limit: number;
   sort:
@@ -132,6 +143,8 @@ export interface PluginScoreStore {
   getAuthor(authorName: string): Promise<AuthorDetail | null>;
   listTags(options: ListTagsOptions): Promise<TagSummary[]>;
   getTag(tagSlug: string, options: GetTagOptions): Promise<TagDetail | null>;
+  listExternalDomains(options: ListExternalDomainsOptions): Promise<ExternalDomainSummary[]>;
+  getExternalDomain(domain: string, options: GetExternalDomainOptions): Promise<ExternalDomainDetail | null>;
   listTrackedPlugins(options: ListTrackedPluginsOptions): Promise<TrackedPluginSummary[]>;
   listQueue(options: ListQueueOptions): Promise<QueueJob[]>;
   listIssues(): Promise<IssueSummary[]>;
