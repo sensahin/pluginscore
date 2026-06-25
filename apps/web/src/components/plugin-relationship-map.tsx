@@ -5,9 +5,16 @@ import type {
   ElementDefinition,
   StylesheetJson,
 } from "cytoscape";
+import {
+  Maximize2,
+  Minimize2,
+  RotateCcw,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject, type ReactNode } from "react";
 import type {
   PluginRelationshipMapData,
   PluginRelationshipNode,
@@ -17,6 +24,15 @@ import type {
 type PositionedNode = PluginRelationshipNode & {
   x: number;
   y: number;
+};
+
+type RelationshipGraph = ReturnType<typeof buildCytoscapeElements>;
+
+type GraphRenderOptions = {
+  padding: number;
+  minZoom: number;
+  maxZoom: number;
+  wheelSensitivity: number;
 };
 
 const nodeTypeLabels: Record<RelationshipNodeType, string> = {
@@ -41,11 +57,230 @@ export function PluginRelationshipMap({
   linksLabel?: string;
   sectionId?: string;
 }) {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const graph = useMemo(() => buildCytoscapeElements(data), [data]);
+  const {
+    containerRef: inlineContainerRef,
+    cyRef: inlineCyRef,
+    loaded: inlineLoaded,
+  } = useRelationshipGraph(graph, {
+    padding: 36,
+    minZoom: 0.45,
+    maxZoom: 2.2,
+    wheelSensitivity: 0.18,
+  });
+
+  useEffect(() => {
+    if (!isFullscreen) {
+      return;
+    }
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsFullscreen(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isFullscreen]);
+
+  if (data.nodes.length <= 1) {
+    return null;
+  }
+
+  return (
+    <section id={sectionId} className="rounded-md border border-line bg-surface shadow-sm">
+      <div className="flex flex-col gap-4 border-b border-line p-5 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-base font-semibold">{title}</h2>
+          <p className="mt-1 text-sm text-muted">{description}</p>
+        </div>
+        <span className="inline-flex w-fit rounded-md border border-line px-3 py-2 font-mono text-sm text-muted">
+          {data.nodes.length.toLocaleString()} nodes
+        </span>
+      </div>
+
+      <div className="hidden p-5 md:block">
+        <div className="relative h-[430px] overflow-hidden rounded-md border border-line bg-background">
+          <div ref={inlineContainerRef} className="h-full w-full" aria-hidden="true" />
+          <MapControls
+            onFullscreen={() => setIsFullscreen(true)}
+            onReset={() => fitGraph(inlineCyRef.current)}
+            onZoomIn={() => zoomGraph(inlineCyRef.current, 1.18)}
+            onZoomOut={() => zoomGraph(inlineCyRef.current, 0.84)}
+          />
+          {!inlineLoaded ? (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted">
+              Loading map
+            </div>
+          ) : null}
+        </div>
+        <GraphLegend nodes={data.nodes} />
+        <details className="mt-4 rounded-md border border-line bg-background">
+          <summary className="cursor-pointer px-3 py-2 text-sm font-medium">
+            {linksLabel}
+          </summary>
+          <div className="border-t border-line p-3">
+            <RelationshipLinkList data={data} />
+          </div>
+        </details>
+      </div>
+
+      <div className="p-5 md:hidden">
+        <RelationshipLinkList data={data} />
+      </div>
+
+      {isFullscreen ? (
+        <FullscreenMap
+          data={data}
+          graph={graph}
+          title={title}
+          onClose={() => setIsFullscreen(false)}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+function FullscreenMap({
+  data,
+  graph,
+  title,
+  onClose,
+}: {
+  data: PluginRelationshipMapData;
+  graph: RelationshipGraph;
+  title: string;
+  onClose: () => void;
+}) {
+  const {
+    containerRef: fullscreenContainerRef,
+    cyRef: fullscreenCyRef,
+    loaded: fullscreenLoaded,
+  } = useRelationshipGraph(graph, {
+    padding: 56,
+    minZoom: 0.35,
+    maxZoom: 3,
+    wheelSensitivity: 0.16,
+  });
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      className="fixed inset-0 z-50 bg-background/96 p-4 backdrop-blur-sm md:p-6"
+    >
+      <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-md border border-line bg-surface shadow-2xl">
+        <div className="flex items-center justify-between gap-4 border-b border-line p-4">
+          <div className="min-w-0">
+            <h2 className="truncate text-base font-semibold">{title}</h2>
+            <p className="mt-1 text-xs text-muted">
+              {data.nodes.length.toLocaleString()} nodes
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <MapIconButton label="Zoom in" onClick={() => zoomGraph(fullscreenCyRef.current, 1.18)}>
+              <ZoomIn size={16} aria-hidden="true" />
+            </MapIconButton>
+            <MapIconButton label="Zoom out" onClick={() => zoomGraph(fullscreenCyRef.current, 0.84)}>
+              <ZoomOut size={16} aria-hidden="true" />
+            </MapIconButton>
+            <MapIconButton label="Reset view" onClick={() => fitGraph(fullscreenCyRef.current)}>
+              <RotateCcw size={16} aria-hidden="true" />
+            </MapIconButton>
+            <MapIconButton label="Exit fullscreen" onClick={onClose}>
+              <Minimize2 size={16} aria-hidden="true" />
+            </MapIconButton>
+          </div>
+        </div>
+        <div className="relative min-h-0 flex-1 bg-background">
+          <div ref={fullscreenContainerRef} className="h-full w-full" aria-hidden="true" />
+          {!fullscreenLoaded ? (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted">
+              Loading map
+            </div>
+          ) : null}
+        </div>
+        <div className="border-t border-line px-4 py-3">
+          <GraphLegend nodes={data.nodes} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MapControls({
+  onFullscreen,
+  onReset,
+  onZoomIn,
+  onZoomOut,
+}: {
+  onFullscreen: () => void;
+  onReset: () => void;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+}) {
+  return (
+    <div className="absolute right-3 top-3 flex items-center gap-1 rounded-md border border-line bg-surface/95 p-1 shadow-sm backdrop-blur">
+      <MapIconButton label="Zoom in" onClick={onZoomIn}>
+        <ZoomIn size={16} aria-hidden="true" />
+      </MapIconButton>
+      <MapIconButton label="Zoom out" onClick={onZoomOut}>
+        <ZoomOut size={16} aria-hidden="true" />
+      </MapIconButton>
+      <MapIconButton label="Reset view" onClick={onReset}>
+        <RotateCcw size={16} aria-hidden="true" />
+      </MapIconButton>
+      <MapIconButton label="Fullscreen" onClick={onFullscreen}>
+        <Maximize2 size={16} aria-hidden="true" />
+      </MapIconButton>
+    </div>
+  );
+}
+
+function MapIconButton({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      className="inline-flex size-8 items-center justify-center rounded-md text-muted transition hover:bg-surface-subtle hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
+function useRelationshipGraph(
+  graph: RelationshipGraph,
+  options: GraphRenderOptions,
+): {
+  containerRef: RefObject<HTMLDivElement | null>;
+  cyRef: RefObject<Core | null>;
+  loaded: boolean;
+} {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
   const router = useRouter();
   const [loaded, setLoaded] = useState(false);
-  const graph = useMemo(() => buildCytoscapeElements(data), [data]);
 
   useEffect(() => {
     let cancelled = false;
@@ -68,10 +303,10 @@ export function PluginRelationshipMap({
       const cy = cytoscapeModule.default({
         container,
         elements: graph.elements,
-        layout: { name: "preset", fit: true, padding: 36 },
-        minZoom: 0.45,
-        maxZoom: 2.2,
-        wheelSensitivity: 0.18,
+        layout: { name: "preset", fit: true, padding: options.padding },
+        minZoom: options.minZoom,
+        maxZoom: options.maxZoom,
+        wheelSensitivity: options.wheelSensitivity,
         style: relationshipGraphStyle(colors),
       });
 
@@ -109,49 +344,28 @@ export function PluginRelationshipMap({
       cyRef.current?.destroy();
       cyRef.current = null;
     };
-  }, [graph, router]);
+  }, [graph, options.maxZoom, options.minZoom, options.padding, options.wheelSensitivity, router]);
 
-  if (data.nodes.length <= 1) {
-    return null;
+  return { containerRef, cyRef, loaded };
+}
+
+function zoomGraph(cy: Core | null, factor: number) {
+  if (!cy) {
+    return;
   }
 
-  return (
-    <section id={sectionId} className="rounded-md border border-line bg-surface shadow-sm">
-      <div className="flex flex-col gap-4 border-b border-line p-5 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 className="text-base font-semibold">{title}</h2>
-          <p className="mt-1 text-sm text-muted">{description}</p>
-        </div>
-        <span className="inline-flex w-fit rounded-md border border-line px-3 py-2 font-mono text-sm text-muted">
-          {data.nodes.length.toLocaleString()} nodes
-        </span>
-      </div>
+  const level = Math.max(cy.minZoom(), Math.min(cy.maxZoom(), cy.zoom() * factor));
+  cy.zoom({
+    level,
+    renderedPosition: {
+      x: cy.width() / 2,
+      y: cy.height() / 2,
+    },
+  });
+}
 
-      <div className="hidden p-5 md:block">
-        <div className="relative h-[430px] overflow-hidden rounded-md border border-line bg-background">
-          <div ref={containerRef} className="h-full w-full" aria-hidden="true" />
-          {!loaded ? (
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted">
-              Loading map
-            </div>
-          ) : null}
-        </div>
-        <GraphLegend nodes={data.nodes} />
-        <details className="mt-4 rounded-md border border-line bg-background">
-          <summary className="cursor-pointer px-3 py-2 text-sm font-medium">
-            {linksLabel}
-          </summary>
-          <div className="border-t border-line p-3">
-            <RelationshipLinkList data={data} />
-          </div>
-        </details>
-      </div>
-
-      <div className="p-5 md:hidden">
-        <RelationshipLinkList data={data} />
-      </div>
-    </section>
-  );
+function fitGraph(cy: Core | null) {
+  cy?.fit(undefined, 36);
 }
 
 function buildCytoscapeElements(data: PluginRelationshipMapData) {

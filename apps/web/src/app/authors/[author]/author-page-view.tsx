@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertTriangle, Download, Gauge, Package, User } from "lucide-react";
+import { AlertTriangle, Download, ExternalLink, Gauge, Package, User } from "lucide-react";
 import type { ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
 import { PaginationControls } from "@/components/pagination-controls";
@@ -253,9 +253,23 @@ export async function AuthorPageView({
             <User size={26} aria-hidden="true" />
           </span>
           <div className="min-w-0">
-            <h1 className="text-3xl font-semibold tracking-normal md:text-4xl">
-              {detail.name}
-            </h1>
+            <div className="flex min-w-0 items-start gap-2">
+              <h1 className="text-3xl font-semibold tracking-normal md:text-4xl">
+                {detail.name}
+              </h1>
+              {detail.profileUrl ? (
+                <a
+                  href={detail.profileUrl}
+                  target="_blank"
+                  rel="nofollow noopener noreferrer"
+                  aria-label={`Open ${detail.name} on WordPress.org`}
+                  title={`Open ${detail.name} on WordPress.org`}
+                  className="mt-1.5 shrink-0 rounded-md p-1 text-muted transition hover:bg-surface-subtle hover:text-foreground"
+                >
+                  <ExternalLink size={18} aria-hidden="true" />
+                </a>
+              ) : null}
+            </div>
             <p className="mt-2 text-sm text-muted">
               {detail.pluginCount.toLocaleString()} indexed plugin
               {detail.pluginCount === 1 ? "" : "s"}
