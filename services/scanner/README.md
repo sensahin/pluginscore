@@ -23,7 +23,8 @@ Runtime:
   configures `wp-config.php`, waits for MariaDB, installs WordPress, and activates
   Plugin Check.
 - `/usr/local/bin/run-plugin-check {pluginDir} {jsonPath}` runs `wp plugin check`
-  with `--format=strict-json` and writes the report to the scanner JSON path.
+  with `--format=json` and writes the report to the scanner JSON path. The scanner
+  parser preserves Plugin Check `FILE:` sections so findings can keep file paths.
 - `PLUGIN_CHECK_MODE`, `PLUGIN_CHECK_CATEGORIES`, `PLUGIN_CHECK_CHECKS`,
   `PLUGIN_CHECK_EXCLUDE_CHECKS`, and `PLUGIN_CHECK_IGNORE_CODES` can narrow or
   adjust the audit without changing scanner code.

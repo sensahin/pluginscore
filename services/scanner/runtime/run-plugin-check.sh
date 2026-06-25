@@ -15,7 +15,7 @@ ARGS=(
   plugin
   check
   "${PLUGIN_DIR}"
-  --format=strict-json
+  --format=json
   --mode="${PLUGIN_CHECK_MODE}"
 )
 

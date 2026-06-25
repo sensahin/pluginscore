@@ -8,6 +8,7 @@ import type {
   ExternalDomainSummary,
   ExternalConnectionOperations,
   IssueSummary,
+  IssueOccurrence,
   OperationsSummary,
   PaginatedResult,
   PluginDetail,
@@ -62,6 +63,12 @@ export type ListTrackedPluginsOptions = {
 
 export type GetPluginHistoryOptions = {
   limit: number;
+};
+
+export type ListPluginIssueOccurrencesOptions = {
+  page: number;
+  perPage: number;
+  locationsOnly?: boolean;
 };
 
 export type ListRecentSearchesOptions = {
@@ -141,6 +148,11 @@ export interface PluginScoreStore {
   listPlugins(options: ListPluginsOptions): Promise<PaginatedResult<PluginSummary>>;
   getPlugin(slug: string): Promise<PluginDetail | null>;
   getPluginHistory(slug: string, options: GetPluginHistoryOptions): Promise<PluginScoreHistory | null>;
+  listPluginIssueOccurrences(
+    slug: string,
+    code: string,
+    options: ListPluginIssueOccurrencesOptions,
+  ): Promise<PaginatedResult<IssueOccurrence> | null>;
   recordSearch(slug: string): Promise<{ recorded: boolean }>;
   listRecentSearches(options: ListRecentSearchesOptions): Promise<PluginSearchSummary[]>;
   createPluginReport(input: PluginReportInput): Promise<PluginReport | null>;

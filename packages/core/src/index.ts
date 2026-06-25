@@ -18,6 +18,7 @@ export type {
   ExternalDomainPluginSummary,
   ExternalDomainSummary,
   FindingCodeCount,
+  IssueOccurrence,
   IssueSummary,
   IssueEditorial,
   IssueReference,

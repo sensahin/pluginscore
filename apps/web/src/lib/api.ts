@@ -7,6 +7,7 @@ import type {
   ExternalConnectionOperations,
   ExternalDomainDetail,
   ExternalDomainSummary,
+  IssueOccurrence,
   IssueSummary,
   OperationsSummary,
   PaginatedResult,
@@ -237,6 +238,37 @@ export async function getPluginScoreHistory(slug: string, limit = 20) {
     `/plugins/${encodeURIComponent(slug)}/history?limit=${limit}`,
     samplePluginScoreHistory(slug),
     { revalidate: PLUGIN_DETAIL_REVALIDATE_SECONDS },
+  );
+}
+
+export async function getPluginIssueOccurrences({
+  slug,
+  code,
+  page = 1,
+  perPage = 20,
+  locationsOnly = false,
+}: {
+  slug: string;
+  code: string;
+  page?: number;
+  perPage?: number;
+  locationsOnly?: boolean;
+}) {
+  const normalizedPage = Math.max(1, page);
+  const normalizedPerPage = Math.max(1, perPage);
+  const params = new URLSearchParams({
+    page: String(normalizedPage),
+    perPage: String(normalizedPerPage),
+  });
+
+  if (locationsOnly) {
+    params.set("locationsOnly", "true");
+  }
+
+  return fetchFromApi<PaginatedResult<IssueOccurrence>>(
+    `/plugins/${encodeURIComponent(slug)}/issues/${encodeURIComponent(code)}/occurrences?${params.toString()}`,
+    emptyPaginatedResult<IssueOccurrence>(normalizedPage, normalizedPerPage),
+    { cache: "no-store" },
   );
 }
 

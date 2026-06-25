@@ -75,8 +75,96 @@ export function parsePluginCheckReport(text: string): unknown {
   try {
     return JSON.parse(trimmed);
   } catch (error) {
+    const sectionedReport = parsePluginCheckFileSections(trimmed);
+    if (sectionedReport) {
+      return sectionedReport;
+    }
+
     throw new ScanCommandError(`Plugin Check did not return parseable JSON: ${(error as Error).message}`);
   }
+}
+
+function parsePluginCheckFileSections(text: string): unknown[] | null {
+  const findings: unknown[] = [];
+  const lines = text.split(/\r?\n/);
+  let currentFile: string | undefined;
+  let currentJsonLines: string[] = [];
+  let sawFileSection = false;
+
+  const flushSection = () => {
+    if (!currentFile) {
+      currentJsonLines = [];
+      return;
+    }
+
+    const sectionText = currentJsonLines.join("\n").trim();
+    currentJsonLines = [];
+
+    if (!sectionText) {
+      return;
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(sectionText);
+    } catch (error) {
+      throw new ScanCommandError(
+        `Plugin Check FILE section for ${currentFile} was not parseable JSON: ${(error as Error).message}`,
+      );
+    }
+
+    for (const finding of extractSectionFindings(parsed)) {
+      findings.push(attachFilePathToFinding(finding, currentFile));
+    }
+  };
+
+  for (const line of lines) {
+    const fileMatch = line.match(/^FILE:\s*(.+?)\s*$/);
+
+    if (fileMatch) {
+      flushSection();
+      currentFile = fileMatch[1];
+      sawFileSection = true;
+      continue;
+    }
+
+    if (currentFile) {
+      currentJsonLines.push(line);
+    }
+  }
+
+  flushSection();
+
+  return sawFileSection ? findings : null;
+}
+
+function extractSectionFindings(parsed: unknown): unknown[] {
+  const findings = extractRawFindings(parsed);
+
+  if (findings.length > 0) {
+    return findings;
+  }
+
+  if (
+    isObject(parsed) &&
+    readString(parsed, ["code", "sniff_code", "rule", "check", "id"]) &&
+    readString(parsed, ["message", "description", "text"])
+  ) {
+    return [parsed];
+  }
+
+  return [];
+}
+
+function attachFilePathToFinding(raw: unknown, filePath: string): unknown {
+  if (!isObject(raw)) {
+    return raw;
+  }
+
+  return {
+    ...raw,
+    file: readString(raw, ["file", "file_path", "path"]) ?? filePath,
+  };
 }
 
 function normalizePluginCheckReport(report: unknown): NormalizedFinding[] {

@@ -5,6 +5,7 @@ import type {
   AuthorSummary,
   ExternalConnectionOperations,
   ExternalConnectionSettings,
+  IssueOccurrence,
   OperationsSummary,
   PaginatedResult,
   PluginReport,
@@ -31,6 +32,7 @@ import type {
   ListTagsOptions,
   GetTagOptions,
   GetPluginHistoryOptions,
+  ListPluginIssueOccurrencesOptions,
   ListPluginsOptions,
   ListTrackedPluginsOptions,
   PluginScoreStore,
@@ -302,6 +304,20 @@ export class MemoryStore implements PluginScoreStore {
         },
       ],
     };
+  }
+
+  async listPluginIssueOccurrences(
+    slug: string,
+    _code: string,
+    options: ListPluginIssueOccurrencesOptions,
+  ): Promise<PaginatedResult<IssueOccurrence> | null> {
+    const plugin = findPlugin(slug);
+
+    if (!plugin) {
+      return null;
+    }
+
+    return paginateItems([], options.page, options.perPage);
   }
 
   async recordSearch(slug: string) {

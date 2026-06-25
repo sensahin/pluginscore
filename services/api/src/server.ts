@@ -45,6 +45,12 @@ const pluginHistoryQuery = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 
+const issueOccurrencesQuery = z.object({
+  page: z.coerce.number().int().min(1).max(10000).default(1),
+  perPage: z.coerce.number().int().min(1).max(100).default(20),
+  locationsOnly: z.enum(["true", "false"]).optional().transform((value) => value === "true"),
+});
+
 const reportTypeSchema = z.enum([
   "incorrect_metadata",
   "score_looks_wrong",
@@ -398,6 +404,21 @@ export async function createServer(config: ApiConfig, store: PluginScoreStore) {
     }
 
     return history;
+  });
+
+  app.get("/plugins/:slug/issues/:code/occurrences", async (request, reply) => {
+    const { slug, code } = z.object({
+      slug: z.string(),
+      code: z.string(),
+    }).parse(request.params);
+    const query = issueOccurrencesQuery.parse(request.query);
+    const occurrences = await store.listPluginIssueOccurrences(slug, code, query);
+
+    if (!occurrences) {
+      return reply.code(404).send({ error: "plugin_not_found" });
+    }
+
+    return occurrences;
   });
 
   app.post("/plugins/:slug/reports", async (request, reply) => {

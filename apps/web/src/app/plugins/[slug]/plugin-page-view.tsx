@@ -25,6 +25,7 @@ import {
 import { AppShell } from "@/components/app-shell";
 import { PluginBadgeCard } from "@/components/plugin-badge-card";
 import { PluginIcon } from "@/components/plugin-icon";
+import { IssueLocations } from "@/components/issue-locations";
 import { PluginRelationshipMap } from "@/components/plugin-relationship-map";
 import { PluginReportCard } from "@/components/plugin-report-card";
 import { RelativeDate } from "@/components/relative-date";
@@ -527,7 +528,11 @@ function IssuesToReview({ plugin }: { plugin: PluginDetail }) {
 
       <div className="divide-y divide-line">
         {visibleFindings.map((finding) => (
-          <IssueReviewRow key={`${finding.code}-${finding.severity}`} finding={finding} />
+          <IssueReviewRow
+            key={`${finding.code}-${finding.severity}`}
+            finding={finding}
+            pluginSlug={plugin.slug}
+          />
         ))}
       </div>
 
@@ -546,7 +551,12 @@ function IssuesToReview({ plugin }: { plugin: PluginDetail }) {
           </summary>
           <div className="divide-y divide-line border-t border-line">
             {remainingFindings.map((finding) => (
-              <IssueReviewRow key={`${finding.code}-${finding.severity}`} finding={finding} compact />
+              <IssueReviewRow
+                key={`${finding.code}-${finding.severity}`}
+                finding={finding}
+                pluginSlug={plugin.slug}
+                compact
+              />
             ))}
           </div>
         </details>
@@ -573,9 +583,11 @@ function issueGroupGridClass(count: number) {
 
 function IssueReviewRow({
   finding,
+  pluginSlug,
   compact = false,
 }: {
   finding: FindingCodeCount;
+  pluginSlug: string;
   compact?: boolean;
 }) {
   return (
@@ -618,6 +630,11 @@ function IssueReviewRow({
             {finding.sampleMessage}
           </p>
         </div>
+        <IssueLocations
+          pluginSlug={pluginSlug}
+          issueCode={finding.code}
+          occurrenceCount={finding.count}
+        />
         <div className="mt-4 flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
           <Link
             href={`/issues/${encodeURIComponent(finding.code)}`}

@@ -13,6 +13,7 @@ import type {
   ExternalDomainPluginSummary,
   ExternalDomainSummary,
   IssueSummary,
+  IssueOccurrence,
   PaginatedResult,
   AuditRunSummary,
   FindingCodeCount,
@@ -67,6 +68,7 @@ import type {
   ListTagsOptions,
   GetPluginHistoryOptions,
   GetTagOptions,
+  ListPluginIssueOccurrencesOptions,
   ListPluginsOptions,
   PluginScoreStore,
   ListTrackedPluginsOptions,
@@ -865,6 +867,81 @@ export class PostgresStore implements PluginScoreStore {
       slug: pluginSlug,
       history: historyResult.rows.map(rowToPluginScoreHistoryPoint),
     };
+  }
+
+  async listPluginIssueOccurrences(
+    slug: string,
+    code: string,
+    options: ListPluginIssueOccurrencesOptions,
+  ): Promise<PaginatedResult<IssueOccurrence> | null> {
+    const pluginResult = await this.pool.query<{
+      slug: string;
+      audit_run_id: number | null;
+    }>(
+      `
+      select p.slug, pcs.audit_run_id
+      from plugins p
+      left join plugin_current_scores pcs on pcs.plugin_id = p.id
+      where p.slug = $1
+      limit 1
+      `,
+      [slug],
+    );
+
+    const plugin = pluginResult.rows[0];
+    if (!plugin) {
+      return null;
+    }
+
+    const auditRunId = optionalNumber(plugin.audit_run_id);
+    const page = Math.max(1, options.page);
+    const perPage = Math.max(1, options.perPage);
+
+    if (!auditRunId) {
+      return toPaginatedResult<IssueOccurrence>([], 0, page, perPage);
+    }
+
+    const issueCode = decodeURIComponent(code);
+    const locationClause = options.locationsOnly
+      ? "and nullif(af.file_path, '') is not null"
+      : "";
+    const countResult = await this.pool.query<{ total: number }>(
+      `
+      select count(*)::integer as total
+      from audit_findings af
+      where af.audit_run_id = $1
+        and af.code = $2
+        ${locationClause}
+      `,
+      [auditRunId, issueCode],
+    );
+    const total = Number(countResult.rows[0]?.total ?? 0);
+    const result = await this.pool.query(
+      `
+      select
+        af.id,
+        af.code,
+        af.severity,
+        af.message,
+        af.file_path,
+        af.line,
+        af.column_number,
+        af.docs_url
+      from audit_findings af
+      where af.audit_run_id = $1
+        and af.code = $2
+        ${locationClause}
+      order by
+        af.file_path asc nulls last,
+        af.line asc nulls last,
+        af.column_number asc nulls last,
+        af.id asc
+      limit $3 offset $4
+      `,
+      [auditRunId, issueCode, perPage, (page - 1) * perPage],
+    );
+
+    return toPaginatedResult(result.rows.map(rowToIssueOccurrence), total, page, perPage);
   }
 
   async recordSearch(slug: string) {
@@ -3421,6 +3498,19 @@ function rowToFindingCodeCount(row: Record<string, unknown>): FindingCodeCount {
     severity: String(row.severity) === "error" ? "error" : "warning",
     count: Number(row.count ?? 0),
     sampleMessage: String(row.sample_message ?? ""),
+    docsUrl: optionalString(row.docs_url),
+  };
+}
+
+function rowToIssueOccurrence(row: Record<string, unknown>): IssueOccurrence {
+  return {
+    id: Number(row.id),
+    code: String(row.code),
+    severity: String(row.severity) === "error" ? "error" : "warning",
+    message: String(row.message ?? ""),
+    filePath: optionalString(row.file_path),
+    line: optionalNumber(row.line),
+    column: optionalNumber(row.column_number),
     docsUrl: optionalString(row.docs_url),
   };
 }

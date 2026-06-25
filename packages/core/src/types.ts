@@ -85,6 +85,17 @@ export type FindingCodeCount = {
   docsUrl?: string;
 };
 
+export type IssueOccurrence = {
+  id: number;
+  code: string;
+  severity: "error" | "warning";
+  message: string;
+  filePath?: string;
+  line?: number;
+  column?: number;
+  docsUrl?: string;
+};
+
 export type PluginTag = {
   slug: string;
   name: string;
