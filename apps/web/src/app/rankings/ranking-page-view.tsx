@@ -144,7 +144,7 @@ export async function RankingPageView({ kind, page = 1 }: RankingPageViewProps) 
         title: "Most Installed Map",
         href: "/rankings/most-installed",
         plugins: plugins.items,
-        limit: 50,
+        limit: 25,
       })
     : null;
 
@@ -188,7 +188,7 @@ export async function RankingPageView({ kind, page = 1 }: RankingPageViewProps) 
           <PluginRelationshipMap
             data={relationshipMap}
             title="Most Installed Map"
-            description="Top 50 plugins by active installs, connected by authors and categories."
+            description="Top 25 plugins by active installs, connected by authors and categories."
             linksLabel="Map links"
             sectionId="most-installed-map"
           />
