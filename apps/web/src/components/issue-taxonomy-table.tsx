@@ -1,5 +1,8 @@
+"use client";
+
 import { AlertTriangle, FileWarning } from "lucide-react";
 import Link from "next/link";
+import { useMemo, useState } from "react";
 import type { IssueSummary } from "@/lib/plugin-score-data";
 
 type IssueGroup = {
@@ -17,7 +20,10 @@ export function IssueTaxonomyTable({
   issues: IssueSummary[];
   title?: string;
 }) {
-  const groups = groupIssuesByFamily(issues);
+  const groups = useMemo(() => groupIssuesByFamily(issues), [issues]);
+  const [activeFamily, setActiveFamily] = useState(groups[0]?.family ?? "");
+  const activeGroup =
+    groups.find((group) => group.family === activeFamily) ?? groups[0];
   const totalAffected = issues.reduce(
     (sum, issue) => sum + issue.affectedPlugins,
     0,
@@ -36,21 +42,30 @@ export function IssueTaxonomyTable({
           </div>
           <FileWarning size={18} className="text-muted" aria-hidden="true" />
         </div>
-        <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-4">
+        <div
+          role="tablist"
+          aria-label="Issue categories"
+          className="flex gap-2 overflow-x-auto p-5"
+        >
           {groups.map((group) => (
-            <a
+            <button
               key={group.family}
-              href={`#${issueGroupId(group.family)}`}
-              className="rounded-md border border-line bg-background p-4 transition hover:bg-surface-subtle"
+              type="button"
+              role="tab"
+              aria-selected={group.family === activeGroup?.family}
+              aria-controls={issueGroupId(group.family)}
+              className={`inline-flex shrink-0 items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition ${
+                group.family === activeGroup?.family
+                  ? "border-brand/40 bg-brand/10 text-foreground"
+                  : "border-line text-muted hover:bg-surface-subtle hover:text-foreground"
+              }`}
+              onClick={() => setActiveFamily(group.family)}
             >
-              <p className="truncate text-sm font-semibold">{group.label}</p>
-              <p className="mt-2 font-mono text-2xl font-semibold">
+              <span>{group.label}</span>
+              <span className="rounded-md border border-line bg-background px-1.5 py-0.5 font-mono text-xs text-muted">
                 {group.issues.length.toLocaleString()}
-              </p>
-              <p className="mt-1 text-xs text-muted">
-                {group.affectedPlugins.toLocaleString()} affected references
-              </p>
-            </a>
+              </span>
+            </button>
           ))}
         </div>
         <div className="border-t border-line px-5 py-3 text-xs text-muted">
@@ -58,33 +73,33 @@ export function IssueTaxonomyTable({
         </div>
       </div>
 
-      {groups.map((group) => (
+      {activeGroup ? (
         <section
-          key={group.family}
-          id={issueGroupId(group.family)}
+          id={issueGroupId(activeGroup.family)}
+          role="tabpanel"
           className="scroll-mt-24 overflow-hidden rounded-md border border-line bg-surface"
         >
           <div className="flex flex-col gap-3 border-b border-line p-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-base font-semibold">{group.label}</h2>
+              <h2 className="text-base font-semibold">{activeGroup.label}</h2>
               <p className="mt-1 text-sm text-muted">
-                {group.issues.length.toLocaleString()} issue code
-                {group.issues.length === 1 ? "" : "s"}
+                {activeGroup.issues.length.toLocaleString()} issue code
+                {activeGroup.issues.length === 1 ? "" : "s"}
               </p>
             </div>
             <div className="flex flex-wrap gap-2 text-xs text-muted">
               <span className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1">
                 <AlertTriangle size={14} aria-hidden="true" />
-                {group.affectedPlugins.toLocaleString()} affected
+                {activeGroup.affectedPlugins.toLocaleString()} affected
               </span>
               <span className="rounded-md border border-line px-2 py-1">
-                {group.highestWeight} max weight
+                {activeGroup.highestWeight} max weight
               </span>
             </div>
           </div>
 
           <div className="divide-y divide-line">
-            {group.issues.map((issue) => (
+            {activeGroup.issues.map((issue) => (
               <Link
                 key={issue.code}
                 href={`/issues/${encodeURIComponent(issue.code)}`}
@@ -112,7 +127,7 @@ export function IssueTaxonomyTable({
             ))}
           </div>
         </section>
-      ))}
+      ) : null}
     </section>
   );
 }
