@@ -1,8 +1,7 @@
 import { getPlugin } from "@/lib/api";
-import type { PluginBadgeTone } from "@/lib/plugin-badge";
 import {
-  pluginBadgeTone,
-  pluginBadgeValue,
+  buildPluginBadgeContent,
+  parsePluginBadgeOptions,
   renderPluginScoreBadge,
 } from "@/lib/plugin-badge";
 
@@ -22,17 +21,23 @@ const missingCacheHeaders = {
 };
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ file: string }> },
 ) {
   const { file } = await context.params;
+  const url = new URL(request.url);
+  const options = parsePluginBadgeOptions(url.searchParams);
   const slug = normalizeBadgeSlug(file);
 
   if (!slug) {
     return badgeResponse(
-      "not found",
-      "missing",
-      "PluginScore badge not found",
+      {
+        label: "PluginScore",
+        value: "not found",
+        title: "PluginScore badge not found",
+        tone: "missing",
+      },
+      options,
       200,
       missingCacheHeaders,
     );
@@ -42,32 +47,33 @@ export async function GET(
 
   if (!plugin) {
     return badgeResponse(
-      "not found",
-      "missing",
-      `${slug} PluginScore not found`,
+      {
+        label: "PluginScore",
+        value: "not found",
+        title: `${slug} PluginScore not found`,
+        tone: "missing",
+      },
+      options,
       200,
       missingCacheHeaders,
     );
   }
 
-  const value = pluginBadgeValue(plugin);
-  const tone = pluginBadgeTone(plugin);
-  const title =
-    plugin.audited === false
-      ? `${plugin.name} PluginScore pending`
-      : `${plugin.name} PluginScore ${value}`;
-
-  return badgeResponse(value, tone, title, 200, badgeCacheHeaders);
+  return badgeResponse(
+    buildPluginBadgeContent(plugin, options),
+    options,
+    200,
+    badgeCacheHeaders,
+  );
 }
 
 function badgeResponse(
-  value: string,
-  tone: PluginBadgeTone,
-  title: string,
+  content: Parameters<typeof renderPluginScoreBadge>[0]["content"],
+  options: Parameters<typeof renderPluginScoreBadge>[0]["options"],
   status: number,
   headers: HeadersInit,
 ) {
-  return new Response(renderPluginScoreBadge({ value, tone, title }), {
+  return new Response(renderPluginScoreBadge({ content, options }), {
     status,
     headers,
   });

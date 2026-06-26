@@ -51,6 +51,7 @@ export type {
   ScanFailPayload,
   ScanJobDto,
   ScoreBand,
+  ScoreBreakdown,
   TagDetail,
   TagSummary,
   TrackedPluginSummary,
