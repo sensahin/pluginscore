@@ -36,6 +36,7 @@ type GraphRenderOptions = {
 };
 
 const nodeTypeLabels: Record<RelationshipNodeType, string> = {
+  ranking: "Ranking",
   plugin: "Plugin",
   author: "Author",
   tag: "Category",
@@ -416,6 +417,12 @@ function positionNodes(data: PluginRelationshipMapData): PositionedNode[] {
         { type: "plugin", radius: 190, start: -172, end: 172 },
         { type: "tag", radius: 300, start: 190, end: 530 },
       ]
+    : center?.type === "ranking"
+      ? [
+          { type: "plugin", radius: 250, start: -176, end: 176 },
+          { type: "tag", radius: 380, start: -172, end: 8 },
+          { type: "author", radius: 380, start: 18, end: 172 },
+        ]
     : [
         { type: "author", radius: 135, start: -98, end: -82 },
         { type: "tag", radius: 190, start: -180, end: -22 },
@@ -482,6 +489,18 @@ function relationshipGraphStyle(colors: ReturnType<typeof graphColors>): Stylesh
         "font-size": 13,
         "font-weight": 700,
         "text-max-width": 140,
+      },
+    },
+    {
+      selector: 'node[type = "ranking"]',
+      style: {
+        "background-color": colors.brand,
+        "border-color": colors.brandStrong,
+        "border-width": 3,
+        color: colors.foreground,
+        "font-size": 13,
+        "font-weight": 700,
+        "text-max-width": 130,
       },
     },
     {
@@ -597,6 +616,7 @@ function graphColors() {
 function GraphLegend({ nodes }: { nodes: PluginRelationshipNode[] }) {
   const visibleTypes = new Set(nodes.map((node) => node.type));
   const allEntries: Array<{ type: RelationshipNodeType; label: string }> = [
+    { type: "ranking", label: "Ranking" },
     { type: "plugin", label: "Plugin" },
     { type: "author", label: "Author" },
     { type: "tag", label: "Category" },
@@ -666,7 +686,7 @@ function RelationshipNodeLink({ node }: { node: PluginRelationshipNode }) {
 }
 
 function groupNodesForList(nodes: PluginRelationshipNode[]) {
-  const order: RelationshipNodeType[] = ["plugin", "author", "tag", "issue", "domain", "relatedPlugin"];
+  const order: RelationshipNodeType[] = ["ranking", "plugin", "author", "tag", "issue", "domain", "relatedPlugin"];
 
   return order
     .map((type) => ({
@@ -677,6 +697,7 @@ function groupNodesForList(nodes: PluginRelationshipNode[]) {
 }
 
 function legendDotClass(type: RelationshipNodeType) {
+  if (type === "ranking") return "bg-brand ring-1 ring-brand-strong";
   if (type === "plugin") return "bg-brand ring-1 ring-good/60";
   if (type === "author") return "bg-info";
   if (type === "tag") return "bg-good";

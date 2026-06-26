@@ -4,11 +4,13 @@ import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { PaginationControls } from "@/components/pagination-controls";
 import { PluginListTable } from "@/components/plugin-list-table";
+import { PluginRelationshipMap } from "@/components/plugin-relationship-map";
 import { getPluginsPage } from "@/lib/api";
 import {
   PLUGIN_DIRECTORY_PER_PAGE,
   titleWithPage,
 } from "@/lib/pagination";
+import { buildRankingRelationshipMap } from "@/lib/plugin-relationship-map";
 import { seoMetadata } from "@/lib/seo";
 
 export const rankingKinds = {
@@ -137,6 +139,14 @@ export async function RankingPageView({ kind, page = 1 }: RankingPageViewProps) 
     audited: ranking.audited,
   });
   const rankOffset = (plugins.page - 1) * plugins.perPage;
+  const relationshipMap = activeKind === "most-installed" && plugins.page === 1
+    ? buildRankingRelationshipMap({
+        title: "Most Installed Map",
+        href: "/rankings/most-installed",
+        plugins: plugins.items,
+        limit: 50,
+      })
+    : null;
 
   return (
     <AppShell>
@@ -173,6 +183,17 @@ export async function RankingPageView({ kind, page = 1 }: RankingPageViewProps) 
           hrefForPage={(targetPage) => rankingPagePath(kind, targetPage)}
         />
       </section>
+      {relationshipMap ? (
+        <div className="mt-6">
+          <PluginRelationshipMap
+            data={relationshipMap}
+            title="Most Installed Map"
+            description="Top 50 plugins by active installs, connected by authors and categories."
+            linksLabel="Map links"
+            sectionId="most-installed-map"
+          />
+        </div>
+      ) : null}
     </AppShell>
   );
 }

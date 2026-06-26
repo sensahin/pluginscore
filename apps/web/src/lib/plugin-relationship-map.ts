@@ -10,6 +10,7 @@ import type {
 import { isPlatformReferenceExternalDomain } from "@pluginscore/core";
 
 export type RelationshipNodeType =
+  | "ranking"
   | "plugin"
   | "author"
   | "tag"
@@ -63,6 +64,12 @@ const MAX_GRAPH_NODES = 48;
 const MAX_GRAPH_EDGES = 90;
 const MAX_AUTHOR_PLUGIN_NODES = 24;
 const MAX_AUTHOR_TAG_NODES = 12;
+const MAX_RANKING_PLUGIN_NODES = 50;
+const MAX_RANKING_TAG_NODES = 14;
+const MAX_RANKING_AUTHOR_NODES = 10;
+const MAX_RANKING_GRAPH_NODES =
+  1 + MAX_RANKING_PLUGIN_NODES + MAX_RANKING_TAG_NODES + MAX_RANKING_AUTHOR_NODES;
+const MAX_RANKING_GRAPH_EDGES = 170;
 
 export function buildPluginRelationshipMap(
   plugin: PluginDetail,
@@ -290,6 +297,131 @@ export function buildAuthorRelationshipMap(
   return relationshipMapResult(centerNodeId, nodes, edges);
 }
 
+export function buildRankingRelationshipMap({
+  title,
+  href,
+  plugins,
+  limit = MAX_RANKING_PLUGIN_NODES,
+}: {
+  title: string;
+  href: string;
+  plugins: PluginSummary[];
+  limit?: number;
+}): PluginRelationshipMapData {
+  const nodes = new Map<string, PluginRelationshipNode>();
+  const edges = new Map<string, PluginRelationshipEdge>();
+  const selectedPlugins = uniquePluginSummaries(plugins)
+    .sort((a, b) => pluginPopularity(b) - pluginPopularity(a) || a.name.localeCompare(b.name))
+    .slice(0, Math.min(limit, MAX_RANKING_PLUGIN_NODES));
+  const centerNodeId = relationshipId("ranking", title);
+
+  addNode(
+    nodes,
+    {
+      id: centerNodeId,
+      type: "ranking",
+      label: title,
+      href,
+      metric: `Top ${selectedPlugins.length.toLocaleString()}`,
+      size: 58,
+    },
+    MAX_RANKING_GRAPH_NODES,
+  );
+
+  if (selectedPlugins.length === 0) {
+    return relationshipMapResult(centerNodeId, nodes, edges);
+  }
+
+  const sharedTags = sharedRankingTags(selectedPlugins).slice(0, MAX_RANKING_TAG_NODES);
+  const sharedAuthors = sharedRankingAuthors(selectedPlugins).slice(0, MAX_RANKING_AUTHOR_NODES);
+  const tagNodeIds = new Map<string, string>();
+  const authorNodeIds = new Map<string, string>();
+
+  for (const plugin of selectedPlugins) {
+    const nodeId = relationshipId("plugin", plugin.slug);
+    if (addNode(
+      nodes,
+      {
+        id: nodeId,
+        type: "plugin",
+        label: plugin.name,
+        href: `/plugins/${encodeURIComponent(plugin.slug)}`,
+        metric: plugin.activeInstalls,
+        band: plugin.band,
+        size: rankingPluginNodeSize(plugin),
+      },
+      MAX_RANKING_GRAPH_NODES,
+    )) {
+      addEdge(edges, centerNodeId, nodeId, "plugin", MAX_RANKING_GRAPH_EDGES);
+    }
+  }
+
+  for (const tag of sharedTags) {
+    const nodeId = relationshipId("tag", tag.slug);
+    tagNodeIds.set(tag.slug, nodeId);
+    if (addNode(
+      nodes,
+      {
+        id: nodeId,
+        type: "tag",
+        label: tag.name,
+        href: `/tags/${encodeURIComponent(tag.slug)}`,
+        metric: `${tag.pluginCount.toLocaleString()} plugins`,
+        size: 28 + Math.min(16, tag.pluginCount * 1.6),
+      },
+      MAX_RANKING_GRAPH_NODES,
+    )) {
+      addEdge(edges, centerNodeId, nodeId, "category", MAX_RANKING_GRAPH_EDGES);
+    }
+  }
+
+  for (const author of sharedAuthors) {
+    const nodeId = relationshipId("author", author.slug);
+    authorNodeIds.set(author.name, nodeId);
+    if (addNode(
+      nodes,
+      {
+        id: nodeId,
+        type: "author",
+        label: author.name,
+        href: `/authors/${encodeURIComponent(author.slug)}`,
+        metric: `${author.pluginCount.toLocaleString()} plugins`,
+        size: 30 + Math.min(12, author.pluginCount * 2),
+      },
+      MAX_RANKING_GRAPH_NODES,
+    )) {
+      addEdge(edges, centerNodeId, nodeId, "author", MAX_RANKING_GRAPH_EDGES);
+    }
+  }
+
+  for (const plugin of selectedPlugins) {
+    const pluginNodeId = relationshipId("plugin", plugin.slug);
+
+    if (plugin.author) {
+      const authorNodeId = authorNodeIds.get(plugin.author);
+      if (authorNodeId) {
+        addEdge(edges, pluginNodeId, authorNodeId, "author", MAX_RANKING_GRAPH_EDGES);
+      }
+    }
+
+    let tagEdges = 0;
+    for (const tag of plugin.tags ?? []) {
+      const tagNodeId = tagNodeIds.get(tag.slug);
+      if (!tagNodeId) {
+        continue;
+      }
+
+      addEdge(edges, pluginNodeId, tagNodeId, "category", MAX_RANKING_GRAPH_EDGES);
+      tagEdges += 1;
+      if (tagEdges >= 2) {
+        break;
+      }
+    }
+  }
+
+  return relationshipMapResult(centerNodeId, nodes, edges);
+}
+
 function authorRouteKey(name: string, profileUrl?: string) {
   const profileSlug = authorSlugFromProfileUrl(profileUrl);
   return profileSlug ?? name;
@@ -342,12 +474,13 @@ function relationshipMapResult(
 function addNode(
   nodes: Map<string, PluginRelationshipNode>,
   node: PluginRelationshipNode,
+  maxNodes = MAX_GRAPH_NODES,
 ) {
   if (nodes.has(node.id)) {
     return false;
   }
 
-  if (nodes.size >= MAX_GRAPH_NODES) {
+  if (nodes.size >= maxNodes) {
     return false;
   }
 
@@ -360,8 +493,9 @@ function addEdge(
   source: string,
   target: string,
   label?: string,
+  maxEdges = MAX_GRAPH_EDGES,
 ) {
-  if (edges.size >= MAX_GRAPH_EDGES || source === target) {
+  if (edges.size >= maxEdges || source === target) {
     return;
   }
 
@@ -474,6 +608,78 @@ function sharedAuthorTags(plugins: PluginSummary[]) {
     );
 }
 
+function sharedRankingTags(plugins: PluginSummary[]) {
+  const bySlug = new Map<string, {
+    slug: string;
+    name: string;
+    pluginCount: number;
+    activeInstalls: number;
+  }>();
+
+  for (const plugin of plugins) {
+    const seenInPlugin = new Set<string>();
+
+    for (const tag of plugin.tags ?? []) {
+      if (seenInPlugin.has(tag.slug)) {
+        continue;
+      }
+
+      const existing = bySlug.get(tag.slug) ?? {
+        slug: tag.slug,
+        name: tag.name,
+        pluginCount: 0,
+        activeInstalls: 0,
+      };
+      existing.pluginCount += 1;
+      existing.activeInstalls += pluginPopularity(plugin);
+      bySlug.set(tag.slug, existing);
+      seenInPlugin.add(tag.slug);
+    }
+  }
+
+  return [...bySlug.values()]
+    .filter((tag) => tag.pluginCount >= 2)
+    .sort((a, b) =>
+      b.pluginCount - a.pluginCount ||
+      b.activeInstalls - a.activeInstalls ||
+      a.name.localeCompare(b.name),
+    );
+}
+
+function sharedRankingAuthors(plugins: PluginSummary[]) {
+  const byName = new Map<string, {
+    name: string;
+    slug: string;
+    pluginCount: number;
+    activeInstalls: number;
+  }>();
+
+  for (const plugin of plugins) {
+    if (!plugin.author) {
+      continue;
+    }
+
+    const slug = authorRouteKey(plugin.author, plugin.authorUrl);
+    const existing = byName.get(plugin.author) ?? {
+      name: plugin.author,
+      slug,
+      pluginCount: 0,
+      activeInstalls: 0,
+    };
+    existing.pluginCount += 1;
+    existing.activeInstalls += pluginPopularity(plugin);
+    byName.set(plugin.author, existing);
+  }
+
+  return [...byName.values()]
+    .filter((author) => author.pluginCount >= 2)
+    .sort((a, b) =>
+      b.pluginCount - a.pluginCount ||
+      b.activeInstalls - a.activeInstalls ||
+      a.name.localeCompare(b.name),
+    );
+}
+
 function isPlatformReferenceDomain(domain: ExternalConnectionDomainSummary) {
   return isPlatformReferenceExternalDomain(domain.domain, domain.confidence);
 }
@@ -488,6 +694,10 @@ function pluginNodeSize(plugin: Pick<PluginSummary, "score" | "activeInstalls">,
 
 function authorPluginNodeSize(plugin: Pick<PluginSummary, "activeInstalls">) {
   return Math.round(26 + Math.min(20, Math.log10(pluginPopularity(plugin) + 10) * 3.2));
+}
+
+function rankingPluginNodeSize(plugin: Pick<PluginSummary, "activeInstalls">) {
+  return Math.round(24 + Math.min(34, Math.log10(pluginPopularity(plugin) + 10) * 4.2));
 }
 
 function pluginPopularity(plugin: Pick<PluginSummary, "activeInstalls">) {
