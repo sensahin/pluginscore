@@ -7,6 +7,7 @@ export type ApiConfig = {
   corsOrigin: string | string[];
   internalToken?: string;
   searchRateLimitPerMinute: number;
+  comparisonRateLimitPerMinute: number;
   submissionRateLimitPerMinute: number;
   reportRateLimitPerMinute: number;
   reportIpHashSecret?: string;
@@ -27,6 +28,10 @@ export function getConfig(): ApiConfig {
     corsOrigin: parseCorsOrigin(process.env.CORS_ORIGIN),
     internalToken: process.env.API_INTERNAL_TOKEN,
     searchRateLimitPerMinute: Number.parseInt(process.env.SEARCH_RATE_LIMIT_PER_MINUTE ?? "60", 10),
+    comparisonRateLimitPerMinute: Number.parseInt(
+      process.env.COMPARISON_RATE_LIMIT_PER_MINUTE ?? "20",
+      10,
+    ),
     submissionRateLimitPerMinute: Number.parseInt(process.env.SUBMISSION_RATE_LIMIT_PER_MINUTE ?? "6", 10),
     reportRateLimitPerMinute: Number.parseInt(process.env.REPORT_RATE_LIMIT_PER_MINUTE ?? "4", 10),
     reportIpHashSecret: process.env.REPORT_IP_HASH_SECRET || process.env.API_INTERNAL_TOKEN,

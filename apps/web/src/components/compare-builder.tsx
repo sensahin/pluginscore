@@ -114,7 +114,14 @@ export function CompareBuilder({
       return;
     }
 
-    router.push(canonicalComparePath(selectedSlugs));
+    const path = canonicalComparePath(selectedSlugs);
+    void fetch("/api/comparisons", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ slugs: selectedSlugs }),
+      keepalive: true,
+    }).catch(() => undefined);
+    router.push(path);
   }
 
   function handleSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {

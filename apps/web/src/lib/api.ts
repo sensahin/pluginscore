@@ -3,6 +3,7 @@ import type {
   AuditFindingsRetentionSummary,
   AuthorDetail,
   AuthorSummary,
+  ComparisonSummary,
   ExternalConnectionAnalysisMode,
   ExternalConnectionOperations,
   ExternalDomainDetail,
@@ -501,6 +502,34 @@ export async function getRecentSearches(limit = 4) {
   return fetchFromApi<PluginSearchSummary[]>(
     `/searches/recent?limit=${limit}`,
     fallback,
+  );
+}
+
+export async function getPopularComparisons({
+  limit = 8,
+  days = 30,
+  pluginCount,
+  minimumCount = 1,
+}: {
+  limit?: number;
+  days?: number;
+  pluginCount?: number;
+  minimumCount?: number;
+} = {}) {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    days: String(days),
+    minimumCount: String(minimumCount),
+  });
+
+  if (pluginCount) {
+    params.set("pluginCount", String(pluginCount));
+  }
+
+  return fetchFromApi<ComparisonSummary[]>(
+    `/comparisons/popular?${params.toString()}`,
+    [],
+    { revalidate: 300 },
   );
 }
 

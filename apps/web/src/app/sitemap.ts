@@ -3,21 +3,29 @@ import {
   getAuthors,
   getExternalDomains,
   getIssues,
+  getPopularComparisons,
   getSitemapPlugins,
   getTags,
 } from "@/lib/api";
+import { canonicalComparePath } from "@/lib/compare";
 import { slugifyLabel } from "@/lib/route-utils";
 
 export const revalidate = 3_600;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
-  const [authors, tags, domains, issues, sitemapPlugins] = await Promise.all([
+  const [authors, tags, domains, issues, sitemapPlugins, comparisons] = await Promise.all([
     getAuthors(500),
     getTags(500, 1),
     getExternalDomains(500, 1),
     getIssues(),
     getSitemapPlugins(),
+    getPopularComparisons({
+      limit: 50,
+      days: 30,
+      pluginCount: 2,
+      minimumCount: 2,
+    }),
   ]);
   const rankingRoutes = [
     "/rankings/best",
@@ -106,6 +114,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: domain.lastSeenAt ? new Date(domain.lastSeenAt) : now,
     }));
 
+  const comparisonRoutes = comparisons.map((comparison) => ({
+    url: `https://pluginscore.com${canonicalComparePath(comparison.pluginSlugs)}`,
+    lastModified: dateOrFallback(comparison.lastComparedAt, now),
+  }));
+
   return [
     ...routes,
     ...pluginRoutes,
@@ -113,6 +126,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...authorRoutes,
     ...tagRoutes,
     ...domainRoutes,
+    ...comparisonRoutes,
   ];
 }
 

@@ -219,6 +219,18 @@ export type PluginSearchSummary = PluginSummary & {
   searchCount: number;
 };
 
+export type ComparisonPluginSummary = Pick<
+  PluginSummary,
+  "slug" | "name" | "iconUrl" | "score" | "activeInstalls" | "audited"
+>;
+
+export type ComparisonSummary = {
+  pluginSlugs: string[];
+  plugins: ComparisonPluginSummary[];
+  comparisonCount: number;
+  lastComparedAt: string;
+};
+
 export type PaginatedResult<T> = {
   items: T[];
   page: number;

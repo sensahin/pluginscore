@@ -3,6 +3,7 @@ import type {
   AuditFindingsRetentionSummary,
   AuthorDetail,
   AuthorSummary,
+  ComparisonSummary,
   ExternalConnectionOperations,
   ExternalConnectionSettings,
   IssueOccurrence,
@@ -29,6 +30,7 @@ import type {
   ListPluginReportsOptions,
   ListQueueOptions,
   ListAuthorsOptions,
+  ListPopularComparisonsOptions,
   ListRecentSearchesOptions,
   ListTagsOptions,
   GetTagOptions,
@@ -57,12 +59,19 @@ type SearchEvent = {
   searchedAt: string;
 };
 
+type ComparisonStat = {
+  slugs: string[];
+  comparisonCount: number;
+  lastComparedAt: string;
+};
+
 type SamplePlugin = (typeof plugins)[number];
 
 export class MemoryStore implements PluginScoreStore {
   private jobs: MemoryJob[] = [];
   private completedAudits: CompletedAudit[] = [];
   private searchEvents: SearchEvent[] = [];
+  private comparisonStats = new Map<string, ComparisonStat>();
   private reports: PluginReport[] = [];
   private externalConnectionSettings: ExternalConnectionSettings = {
     mode: "off",
@@ -366,6 +375,71 @@ export class MemoryStore implements PluginScoreStore {
       searchedAt: new Date(Date.now() - index * 60_000).toISOString(),
       searchCount: 1,
     }));
+  }
+
+  async recordComparison(slugs: string[]) {
+    const comparisonPlugins = slugs.map((slug) => findPlugin(slug));
+    if (comparisonPlugins.some((plugin) => !plugin)) {
+      return { recorded: false };
+    }
+
+    const key = JSON.stringify(slugs);
+    const existing = this.comparisonStats.get(key);
+    this.comparisonStats.set(key, {
+      slugs,
+      comparisonCount: (existing?.comparisonCount ?? 0) + 1,
+      lastComparedAt: new Date().toISOString(),
+    });
+
+    return { recorded: true };
+  }
+
+  async listPopularComparisons(
+    options: ListPopularComparisonsOptions,
+  ): Promise<ComparisonSummary[]> {
+    const earliest = Date.now() - options.days * 24 * 60 * 60 * 1000;
+
+    return [...this.comparisonStats.values()]
+      .filter((comparison) => Date.parse(comparison.lastComparedAt) >= earliest)
+      .filter((comparison) =>
+        options.pluginCount ? comparison.slugs.length === options.pluginCount : true,
+      )
+      .filter((comparison) => comparison.comparisonCount >= options.minimumCount)
+      .flatMap((comparison): ComparisonSummary[] => {
+        const comparisonPlugins = comparison.slugs
+          .map((slug) => findPlugin(slug))
+          .filter((plugin): plugin is NonNullable<ReturnType<typeof findPlugin>> =>
+            Boolean(
+              plugin &&
+                plugin.audited !== false &&
+                plugin.latestAudit?.status === "complete",
+            ),
+          );
+
+        if (comparisonPlugins.length !== comparison.slugs.length) {
+          return [];
+        }
+
+        return [{
+          pluginSlugs: comparison.slugs,
+          plugins: comparisonPlugins.map((plugin) => ({
+            slug: plugin.slug,
+            name: plugin.name,
+            ...(plugin.iconUrl ? { iconUrl: plugin.iconUrl } : {}),
+            score: plugin.score,
+            activeInstalls: plugin.activeInstalls,
+            audited: true,
+          })),
+          comparisonCount: comparison.comparisonCount,
+          lastComparedAt: comparison.lastComparedAt,
+        }];
+      })
+      .sort(
+        (a, b) =>
+          b.comparisonCount - a.comparisonCount ||
+          b.lastComparedAt.localeCompare(a.lastComparedAt),
+      )
+      .slice(0, options.limit);
   }
 
   async createPluginReport(input: PluginReportInput): Promise<PluginReport | null> {

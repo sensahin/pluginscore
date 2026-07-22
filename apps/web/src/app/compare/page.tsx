@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { CompareBuilder } from "@/components/compare-builder";
-import { getPlugins } from "@/lib/api";
+import { PopularComparisons } from "@/components/popular-comparisons";
+import { RecentComparisons } from "@/components/recent-comparisons";
+import { getPlugins, getPopularComparisons } from "@/lib/api";
 import {
   canonicalComparePath,
   isValidComparison,
@@ -33,10 +35,13 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
     redirect(canonicalComparePath(requestedSlugs));
   }
 
-  const plugins = await getPlugins({
-    limit: LOCAL_PLUGIN_SUGGESTION_LIMIT,
-    sort: "installs_desc",
-  });
+  const [plugins, popularComparisons] = await Promise.all([
+    getPlugins({
+      limit: LOCAL_PLUGIN_SUGGESTION_LIMIT,
+      sort: "installs_desc",
+    }),
+    getPopularComparisons({ limit: 8, days: 30, pluginCount: 2 }),
+  ]);
 
   return (
     <AppShell>
@@ -50,6 +55,7 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
           plugins={plugins.map((plugin) => ({
             slug: plugin.slug,
             name: plugin.name,
+            iconUrl: plugin.iconUrl,
             activeInstalls: plugin.activeInstalls,
             downloads: plugin.downloads,
             rating: plugin.rating,
@@ -60,6 +66,8 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
           }))}
           initialSlugs={requestedSlugs}
         />
+        <PopularComparisons comparisons={popularComparisons} />
+        <RecentComparisons />
       </section>
     </AppShell>
   );

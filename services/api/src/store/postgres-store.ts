@@ -3,6 +3,7 @@ import type {
   AuditFindingsRetentionSummary,
   AuthorDetail,
   AuthorSummary,
+  ComparisonSummary,
   ExternalConnectionAnalysisMode,
   ExternalConnectionAnalysisSummary,
   ExternalConnectionDomainSummary,
@@ -62,6 +63,7 @@ import type {
   GetAuthorOptions,
   GetExternalDomainOptions,
   ListAuthorsOptions,
+  ListPopularComparisonsOptions,
   ListExternalDomainsOptions,
   ListQueueOptions,
   ListPluginReportsOptions,
@@ -984,6 +986,143 @@ export class PostgresStore implements PluginScoreStore {
     );
 
     return result.rows.map(rowToPluginSearchSummary);
+  }
+
+  async recordComparison(slugs: string[]) {
+    if (slugs.length < 2 || slugs.length > 4) {
+      return { recorded: false };
+    }
+
+    const pluginCountResult = await this.pool.query<{ plugin_count: number }>(
+      `
+      select count(*)::integer as plugin_count
+      from plugins
+      where slug = any($1::text[])
+      `,
+      [slugs],
+    );
+
+    if (Number(pluginCountResult.rows[0]?.plugin_count ?? 0) !== slugs.length) {
+      return { recorded: false };
+    }
+
+    await this.pool.query(
+      `
+      insert into comparison_daily_stats (
+        comparison_key,
+        plugin_slugs,
+        plugin_count,
+        comparison_date,
+        compare_count,
+        first_compared_at,
+        last_compared_at
+      )
+      values ($1, $2::text[], $3, current_date, 1, now(), now())
+      on conflict (comparison_key, comparison_date) do update set
+        compare_count = comparison_daily_stats.compare_count + 1,
+        last_compared_at = now()
+      `,
+      [JSON.stringify(slugs), slugs, slugs.length],
+    );
+
+    return { recorded: true };
+  }
+
+  async listPopularComparisons(
+    options: ListPopularComparisonsOptions,
+  ): Promise<ComparisonSummary[]> {
+    const statsResult = await this.pool.query(
+      `
+      with candidates as (
+        select
+          comparison_key,
+          plugin_slugs,
+          plugin_count,
+          sum(compare_count)::integer as comparison_count,
+          max(last_compared_at) as last_compared_at
+        from comparison_daily_stats
+        where comparison_date >= current_date - ($2::integer - 1)
+          and ($3::smallint is null or plugin_count = $3::smallint)
+        group by comparison_key, plugin_slugs, plugin_count
+        having sum(compare_count) >= $4
+      ), eligible as (
+        select candidates.*
+        from candidates
+        where (
+          select count(*)
+          from unnest(candidates.plugin_slugs) as compared_slug(slug)
+          join plugins compared_plugin on compared_plugin.slug = compared_slug.slug
+          join plugin_current_scores compared_score
+            on compared_score.plugin_id = compared_plugin.id
+        ) = candidates.plugin_count
+        order by
+          candidates.comparison_count desc,
+          candidates.last_compared_at desc,
+          candidates.comparison_key asc
+        limit $1
+      )
+      select *
+      from eligible
+      order by comparison_count desc, last_compared_at desc, comparison_key asc
+      `,
+      [
+        options.limit,
+        options.days,
+        options.pluginCount ?? null,
+        options.minimumCount,
+      ],
+    );
+
+    const allSlugs = [
+      ...new Set(statsResult.rows.flatMap((row) => rowToStringArray(row.plugin_slugs))),
+    ];
+    if (allSlugs.length === 0) {
+      return [];
+    }
+
+    const pluginsResult = await this.pool.query(
+      `
+      ${pluginListSelectSql()}
+      from plugins p
+      join plugin_current_scores pcs on pcs.plugin_id = p.id
+      ${pluginTagsSelectSql()}
+      where p.slug = any($1::text[])
+      `,
+      [allSlugs],
+    );
+    const pluginsBySlug = new Map(
+      pluginsResult.rows.map((row) => {
+        const plugin = rowToPluginSummary(row);
+        return [plugin.slug, plugin] as const;
+      }),
+    );
+
+    return statsResult.rows
+      .flatMap((row): ComparisonSummary[] => {
+        const pluginSlugs = rowToStringArray(row.plugin_slugs);
+        const comparisonPlugins = pluginSlugs
+          .map((slug) => pluginsBySlug.get(slug))
+          .filter((plugin): plugin is PluginSummary => Boolean(plugin));
+
+        if (comparisonPlugins.length !== pluginSlugs.length) {
+          return [];
+        }
+
+        return [{
+          pluginSlugs,
+          plugins: comparisonPlugins.map((plugin) => ({
+            slug: plugin.slug,
+            name: plugin.name,
+            ...(plugin.iconUrl ? { iconUrl: plugin.iconUrl } : {}),
+            score: plugin.score,
+            activeInstalls: plugin.activeInstalls,
+            audited: true,
+          })),
+          comparisonCount: Number(row.comparison_count ?? 0),
+          lastComparedAt:
+            optionalIsoDate(row.last_compared_at) ?? new Date().toISOString(),
+        }];
+      });
   }
 
   async createPluginReport(input: PluginReportInput): Promise<PluginReport | null> {

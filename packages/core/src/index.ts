@@ -4,6 +4,8 @@ export type {
   AuthorDetail,
   AuthorSummary,
   AuditRunSummary,
+  ComparisonPluginSummary,
+  ComparisonSummary,
   ExternalConnectionAnalysisMode,
   ExternalConnectionAnalysisStatus,
   ExternalConnectionAnalysisSummary,

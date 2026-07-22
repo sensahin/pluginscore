@@ -3,6 +3,7 @@ import type {
   AuditFindingsRetentionSummary,
   AuthorDetail,
   AuthorSummary,
+  ComparisonSummary,
   ExternalConnectionAnalysisMode,
   ExternalDomainDetail,
   ExternalDomainSummary,
@@ -73,6 +74,13 @@ export type ListPluginIssueOccurrencesOptions = {
 
 export type ListRecentSearchesOptions = {
   limit: number;
+};
+
+export type ListPopularComparisonsOptions = {
+  limit: number;
+  days: number;
+  pluginCount?: number;
+  minimumCount: number;
 };
 
 export type ListPluginReportsOptions = {
@@ -159,6 +167,10 @@ export interface PluginScoreStore {
   ): Promise<PaginatedResult<IssueOccurrence> | null>;
   recordSearch(slug: string): Promise<{ recorded: boolean }>;
   listRecentSearches(options: ListRecentSearchesOptions): Promise<PluginSearchSummary[]>;
+  recordComparison(slugs: string[]): Promise<{ recorded: boolean }>;
+  listPopularComparisons(
+    options: ListPopularComparisonsOptions,
+  ): Promise<ComparisonSummary[]>;
   createPluginReport(input: PluginReportInput): Promise<PluginReport | null>;
   listPluginReports(options: ListPluginReportsOptions): Promise<PaginatedResult<PluginReport>>;
   pluginReportStats(): Promise<PluginReportStats>;

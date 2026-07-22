@@ -220,6 +220,45 @@ components:
           type: boolean
         nextCursor:
           type: string
+    ComparisonSummary:
+      type: object
+      required: [pluginSlugs, plugins, comparisonCount, lastComparedAt]
+      properties:
+        pluginSlugs:
+          type: array
+          minItems: 2
+          maxItems: 4
+          items:
+            type: string
+        plugins:
+          type: array
+          minItems: 2
+          maxItems: 4
+          items:
+            type: object
+            required: [slug, name, score, activeInstalls, audited]
+            properties:
+              slug:
+                type: string
+              name:
+                type: string
+              iconUrl:
+                type: string
+                format: uri
+              score:
+                type: integer
+                minimum: 0
+                maximum: 100
+              activeInstalls:
+                type: string
+              audited:
+                type: boolean
+        comparisonCount:
+          type: integer
+          minimum: 1
+        lastComparedAt:
+          type: string
+          format: date-time
 paths:
   /health:
     get:
@@ -403,6 +442,68 @@ paths:
           description: Per-IP search recording rate limit exceeded
         "404":
           description: Plugin is not indexed yet, so no search was recorded
+  /comparisons/popular:
+    get:
+      summary: List popular audited plugin comparisons
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 8
+            maximum: 100
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 30
+            maximum: 365
+        - name: pluginCount
+          in: query
+          schema:
+            type: integer
+            minimum: 2
+            maximum: 4
+        - name: minimumCount
+          in: query
+          schema:
+            type: integer
+            default: 1
+      responses:
+        "200":
+          description: Popular comparisons ordered by explicit comparison count
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ComparisonSummary"
+  /comparisons:
+    post:
+      summary: Record an anonymous explicit comparison action
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slugs]
+              properties:
+                slugs:
+                  type: array
+                  minItems: 2
+                  maxItems: 4
+                  items:
+                    type: string
+      responses:
+        "202":
+          description: Comparison recorded for known plugins
+        "400":
+          description: Invalid or duplicate plugin slugs
+        "404":
+          description: At least one plugin is not indexed
+        "429":
+          description: Per-IP comparison recording rate limit exceeded
   /queue:
     get:
       summary: List sanitized scan queue status

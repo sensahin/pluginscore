@@ -84,6 +84,17 @@ const listRecentSearchesQuery = z.object({
   limit: z.coerce.number().int().min(1).max(20).default(4),
 });
 
+const listPopularComparisonsQuery = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(8),
+  days: z.coerce.number().int().min(1).max(365).default(30),
+  pluginCount: z.coerce.number().int().min(2).max(4).optional(),
+  minimumCount: z.coerce.number().int().min(1).max(10000).default(1),
+});
+
+const recordComparisonBody = z.object({
+  slugs: z.array(z.string().trim().min(1).max(200)).min(2).max(4),
+});
+
 const listAuthorsQuery = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(100),
   sort: z
@@ -337,6 +348,10 @@ export async function createServer(config: ApiConfig, store: PluginScoreStore) {
     limit: config.searchRateLimitPerMinute,
     windowMs: 60_000,
   });
+  const comparisonRateLimiter = createFixedWindowRateLimiter({
+    limit: config.comparisonRateLimitPerMinute,
+    windowMs: 60_000,
+  });
   const submissionRateLimiter = createFixedWindowRateLimiter({
     limit: config.submissionRateLimitPerMinute,
     windowMs: 60_000,
@@ -537,6 +552,11 @@ export async function createServer(config: ApiConfig, store: PluginScoreStore) {
     return store.listRecentSearches(query);
   });
 
+  app.get("/comparisons/popular", async (request) => {
+    const query = listPopularComparisonsQuery.parse(request.query);
+    return store.listPopularComparisons(query);
+  });
+
   app.get("/authors", async (request) => {
     const query = listAuthorsQuery.parse(request.query);
     return store.listAuthors(query);
@@ -600,6 +620,27 @@ export async function createServer(config: ApiConfig, store: PluginScoreStore) {
 
     const body = recordSearchBody.parse(request.body);
     const result = await store.recordSearch(normalizeSlug(body.slug));
+    return reply.code(result.recorded ? 202 : 404).send(result);
+  });
+
+  app.post("/comparisons", async (request, reply) => {
+    if (!comparisonRateLimiter.consume(request.ip)) {
+      return reply
+        .code(429)
+        .header("Retry-After", "60")
+        .send({ error: "rate_limited" });
+    }
+
+    const body = recordComparisonBody.parse(request.body);
+    const slugs = [...new Set(body.slugs.map(normalizeSlug).filter(Boolean))].sort(
+      (a, b) => a.localeCompare(b),
+    );
+
+    if (slugs.length < 2 || slugs.length > 4) {
+      return reply.code(400).send({ error: "invalid_comparison" });
+    }
+
+    const result = await store.recordComparison(slugs);
     return reply.code(result.recorded ? 202 : 404).send(result);
   });
 

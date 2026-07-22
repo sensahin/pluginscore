@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
 import { PluginIcon } from "@/components/plugin-icon";
 import { RelativeDate } from "@/components/relative-date";
+import { RememberComparison } from "@/components/remember-comparison";
 import { ScoreBadge } from "@/components/score-badge";
 import { parseCompactNumber } from "@/lib/compare";
 import { groupFindingCodeCounts } from "@/lib/finding-groups";
@@ -27,6 +28,13 @@ export function ComparisonPageView({ entries }: { entries: ComparisonEntry[] }) 
   return (
     <AppShell>
       <section className="space-y-5">
+        <RememberComparison
+          plugins={entries.map((entry) => ({
+            slug: entry.plugin.slug,
+            name: pluginDisplayName(entry.plugin),
+            ...(entry.plugin.iconUrl ? { iconUrl: entry.plugin.iconUrl } : {}),
+          }))}
+        />
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="text-3xl font-semibold tracking-normal sm:text-4xl">

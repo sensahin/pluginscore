@@ -4,6 +4,7 @@ export type PluginSuggestion = Pick<
   PluginSummary,
   | "slug"
   | "name"
+  | "iconUrl"
   | "activeInstalls"
   | "downloads"
   | "lastUpdated"

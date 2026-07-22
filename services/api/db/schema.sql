@@ -53,6 +53,21 @@ create index if not exists plugin_search_events_created_idx
 create index if not exists plugin_search_events_plugin_created_idx
   on plugin_search_events(plugin_id, created_at desc);
 
+create table if not exists comparison_daily_stats (
+  comparison_key text not null,
+  plugin_slugs text[] not null,
+  plugin_count smallint not null check (plugin_count between 2 and 4),
+  comparison_date date not null default current_date,
+  compare_count integer not null default 1 check (compare_count > 0),
+  first_compared_at timestamptz not null default now(),
+  last_compared_at timestamptz not null default now(),
+  primary key (comparison_key, comparison_date),
+  check (plugin_count = cardinality(plugin_slugs))
+);
+
+create index if not exists comparison_daily_stats_popular_idx
+  on comparison_daily_stats(comparison_date desc, plugin_count, compare_count desc);
+
 create table if not exists tags (
   id bigserial primary key,
   slug text not null unique,
