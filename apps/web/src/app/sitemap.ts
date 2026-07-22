@@ -8,6 +8,7 @@ import {
   getTags,
 } from "@/lib/api";
 import { canonicalComparePath } from "@/lib/compare";
+import { FEATURED_COMPARISON_SLUGS } from "@/lib/featured-comparisons";
 import { slugifyLabel } from "@/lib/route-utils";
 
 export const revalidate = 3_600;
@@ -114,10 +115,27 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: domain.lastSeenAt ? new Date(domain.lastSeenAt) : now,
     }));
 
-  const comparisonRoutes = comparisons.map((comparison) => ({
-    url: `https://pluginscore.com${canonicalComparePath(comparison.pluginSlugs)}`,
-    lastModified: dateOrFallback(comparison.lastComparedAt, now),
-  }));
+  const featuredComparisonPaths = new Set(
+    FEATURED_COMPARISON_SLUGS.map((slugs) =>
+      canonicalComparePath([...slugs]),
+    ),
+  );
+  const comparisonRoutes = [
+    ...[...featuredComparisonPaths].map((path) => ({
+      url: `https://pluginscore.com${path}`,
+      lastModified: now,
+    })),
+    ...comparisons.flatMap((comparison) => {
+      const path = canonicalComparePath(comparison.pluginSlugs);
+
+      return featuredComparisonPaths.has(path)
+        ? []
+        : [{
+            url: `https://pluginscore.com${path}`,
+            lastModified: dateOrFallback(comparison.lastComparedAt, now),
+          }];
+    }),
+  ];
 
   return [
     ...routes,

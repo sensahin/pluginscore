@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { CompareBuilder } from "@/components/compare-builder";
+import { FeaturedComparisons } from "@/components/featured-comparisons";
 import { PopularComparisons } from "@/components/popular-comparisons";
 import { RecentComparisons } from "@/components/recent-comparisons";
 import { getPlugins, getPopularComparisons } from "@/lib/api";
@@ -9,6 +10,7 @@ import {
   isValidComparison,
   parseComparisonQuery,
 } from "@/lib/compare";
+import { buildFeaturedComparisons } from "@/lib/featured-comparisons";
 import { LOCAL_PLUGIN_SUGGESTION_LIMIT } from "@/lib/plugin-suggestions";
 import { seoMetadata } from "@/lib/seo";
 
@@ -42,6 +44,7 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
     }),
     getPopularComparisons({ limit: 8, days: 30, pluginCount: 2 }),
   ]);
+  const featuredComparisons = buildFeaturedComparisons(plugins);
 
   return (
     <AppShell>
@@ -66,6 +69,7 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
           }))}
           initialSlugs={requestedSlugs}
         />
+        <FeaturedComparisons comparisons={featuredComparisons} />
         <PopularComparisons comparisons={popularComparisons} />
         <RecentComparisons />
       </section>
