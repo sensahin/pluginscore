@@ -4,8 +4,14 @@ The scheduler keeps PluginScore's WordPress.org source metadata and scan queue f
 
 Commands:
 
-- `sync-once`: fetch the current popular plugin window and enqueue missing audits.
-- `work`: repeat `sync-once`, then sleep for `SCHEDULER_INTERVAL_SECONDS`.
+- `sync-once`: fetch the current popular plugin list and enqueue one bounded window of missing audits.
+- `work`: repeat `sync-once`, advance the in-memory cursor, then sleep for `SCHEDULER_INTERVAL_SECONDS`.
+
+`SCHEDULER_LIMIT` controls the popular-list horizon. `SCHEDULER_BATCH_SIZE`
+controls how many popular plugins are checked per pass, so a top-10000 watcher
+can spread work over many hourly passes instead of stampeding the API/database.
+`SCHEDULER_TRACKED_BATCH_SIZE` does the same for non-popular tracked plugins.
+`SCHEDULER_ENQUEUE_DELAY_MS` adds a small pause after each bulk enqueue request.
 
 Each enqueue request includes:
 

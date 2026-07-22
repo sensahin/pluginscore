@@ -57,6 +57,17 @@ export function createOgImage({
 }: OgImageOptions) {
   const scoreColor = score === undefined ? colors.brand : bandColor[band];
   const safeIconUrl = safeRasterImageUrl(iconUrl);
+  const safeEyebrow = textNeedsSimpleOgFallback(eyebrow) ? "PluginScore" : eyebrow;
+  const safeTitle = textNeedsSimpleOgFallback(title) ? "WordPress Plugin Score" : title;
+  const safeSubtitle =
+    subtitle && textNeedsSimpleOgFallback(subtitle)
+      ? "Plugin score and audit summary on PluginScore."
+      : subtitle;
+  const safeIconFallback = textNeedsSimpleOgFallback(iconFallback) ? "P" : iconFallback;
+  const safeStats = stats.map((stat) => ({
+    label: textNeedsSimpleOgFallback(stat.label) ? "Metric" : stat.label,
+    value: textNeedsSimpleOgFallback(stat.value) ? "Available" : stat.value,
+  }));
 
   return new ImageResponse(
     (
@@ -177,22 +188,22 @@ export function createOgImage({
                   fontWeight: 700,
                 }}
               >
-                {truncateText(eyebrow, 56)}
+                {truncateText(safeEyebrow, 56)}
               </div>
               <div
                 style={{
                   display: "flex",
                   color: colors.foreground,
-                  fontSize: title.length > 42 ? 56 : 64,
+                  fontSize: safeTitle.length > 42 ? 56 : 64,
                   fontWeight: 850,
                   lineHeight: 1.04,
                   letterSpacing: 0,
                   maxWidth: 700,
                 }}
               >
-                {truncateText(title, 68)}
+                {truncateText(safeTitle, 68)}
               </div>
-              {subtitle ? (
+              {safeSubtitle ? (
                 <div
                   style={{
                     display: "flex",
@@ -202,7 +213,7 @@ export function createOgImage({
                     maxWidth: 700,
                   }}
                 >
-                  {truncateText(subtitle, 118)}
+                  {truncateText(safeSubtitle, 118)}
                 </div>
               ) : null}
             </div>
@@ -244,7 +255,7 @@ export function createOgImage({
                     style={{ width: 118, height: 118 }}
                   />
                 ) : (
-                  truncateText(iconFallback, 2).toUpperCase()
+                  truncateText(safeIconFallback, 2).toUpperCase()
                 )}
               </div>
 
@@ -275,9 +286,9 @@ export function createOgImage({
               gap: 14,
             }}
           >
-            {stats.slice(0, 4).map((stat) => (
+            {safeStats.slice(0, 4).map((stat, index) => (
               <div
-                key={stat.label}
+                key={`${stat.label}-${index}`}
                 style={{
                   display: "flex",
                   flexDirection: "column",
@@ -383,3 +394,10 @@ function safeRasterImageUrl(value?: string) {
     return undefined;
   }
 }
+
+function textNeedsSimpleOgFallback(value: string) {
+  return complexTextShapingPattern.test(value);
+}
+
+const complexTextShapingPattern =
+  /[\u0590-\u08FF\u0900-\u0D7F\u0E00-\u0E7F\u0F00-\u0FFF\u1000-\u109F\u1780-\u17FF\uFB50-\uFDFF\uFE70-\uFEFF]/;

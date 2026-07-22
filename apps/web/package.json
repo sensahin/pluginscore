@@ -12,6 +12,7 @@
     "@pluginscore/core": "*",
     "@pluginscore/wporg": "*",
     "@vercel/analytics": "^2.0.1",
+    "@vercel/functions": "^3.7.5",
     "@vercel/speed-insights": "^2.0.0",
     "cytoscape": "^3.34.0",
     "lucide-react": "^1.21.0",

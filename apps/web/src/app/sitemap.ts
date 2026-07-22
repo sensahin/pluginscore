@@ -1,16 +1,23 @@
 import type { MetadataRoute } from "next";
-import { getAuthors, getExternalDomains, getTags } from "@/lib/api";
-import { issues, plugins } from "@/lib/plugin-score-data";
+import {
+  getAuthors,
+  getExternalDomains,
+  getIssues,
+  getSitemapPlugins,
+  getTags,
+} from "@/lib/api";
 import { slugifyLabel } from "@/lib/route-utils";
 
 export const revalidate = 3_600;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
-  const [authors, tags, domains] = await Promise.all([
-    getAuthors(150),
-    getTags(150, 3),
-    getExternalDomains(150, 3),
+  const [authors, tags, domains, issues, sitemapPlugins] = await Promise.all([
+    getAuthors(500),
+    getTags(500, 1),
+    getExternalDomains(500, 1),
+    getIssues(),
+    getSitemapPlugins(),
   ]);
   const rankingRoutes = [
     "/rankings/best",
@@ -52,9 +59,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     lastModified: now,
   }));
 
-  const pluginRoutes = plugins.map((plugin) => ({
-    url: `https://pluginscore.com/plugins/${plugin.slug}`,
-    lastModified: new Date(plugin.lastUpdated),
+  const pluginRoutes = sitemapPlugins.map((plugin) => ({
+    url: `https://pluginscore.com/plugins/${encodeURIComponent(plugin.slug)}`,
+    lastModified: dateOrFallback(plugin.updatedAt, now),
   }));
 
   const issueRoutes = issues.map((issue) => ({
@@ -107,4 +114,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...tagRoutes,
     ...domainRoutes,
   ];
+}
+
+function dateOrFallback(value: string | undefined, fallback: Date) {
+  if (!value) {
+    return fallback;
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? fallback : date;
 }

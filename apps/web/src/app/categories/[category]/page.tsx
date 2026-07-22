@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import {
   CategoryPageView,
   generateCategoryMetadata,
-  generateCategoryStaticParams,
 } from "./category-page-view";
 
 export const revalidate = 1_800;
@@ -10,8 +9,6 @@ export const revalidate = 1_800;
 type CategoryPageProps = {
   params: Promise<{ category: string }>;
 };
-
-export const generateStaticParams = generateCategoryStaticParams;
 
 export async function generateMetadata({
   params,

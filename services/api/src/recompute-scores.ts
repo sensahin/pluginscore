@@ -260,7 +260,15 @@ async function rebuildPluginRankSnapshots(client: PoolClient) {
     from (
       select
         'best'::text as ranking_key,
-        row_number() over (order by pcs.score desc, p.slug asc)::integer as rank,
+        row_number() over (
+          order by
+            pcs.score desc,
+            coalesce(p.active_installs, 0) desc,
+            coalesce(p.downloads, 0) desc,
+            coalesce(p.rating_count, 0) desc,
+            coalesce(p.rating, 0) desc,
+            p.slug asc
+        )::integer as rank,
         p.id as plugin_id,
         pcs.score::numeric as sort_value
       from plugins p

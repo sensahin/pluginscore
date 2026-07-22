@@ -16,6 +16,7 @@ import { getExternalDomain, getExternalDomains } from "@/lib/api";
 import { seoMetadata } from "@/lib/seo";
 
 const INDEXABLE_DOMAIN_PLUGIN_MINIMUM = 3;
+const DOMAIN_SUMMARY_PREVIEW_LIMIT = 0;
 
 type DomainPageProps = {
   params: Promise<{ domain: string }>;
@@ -24,7 +25,7 @@ type DomainPageProps = {
 export const revalidate = 1_800;
 
 export async function generateStaticParams() {
-  const domains = await getExternalDomains(100, INDEXABLE_DOMAIN_PLUGIN_MINIMUM);
+  const domains = await getExternalDomains(50, INDEXABLE_DOMAIN_PLUGIN_MINIMUM);
 
   return domains
     .filter((domain) => !domain.platformReference)
@@ -36,7 +37,7 @@ export async function generateMetadata({
 }: DomainPageProps): Promise<Metadata> {
   const { domain } = await params;
   const decodedDomain = decodeURIComponent(domain);
-  const detail = await getExternalDomain(decodedDomain, 100);
+  const detail = await getExternalDomain(decodedDomain, DOMAIN_SUMMARY_PREVIEW_LIMIT);
   const displayDomain = detail?.domain ?? decodedDomain;
   const description =
     `WordPress plugins that reference ${displayDomain}, including outbound calls, external assets, and static analysis context from PluginScore.`;

@@ -25,7 +25,7 @@ export function sortPluginSummaries(
     if (sort === "installs_desc") return parseCompact(b.activeInstalls) - parseCompact(a.activeInstalls) || a.name.localeCompare(b.name);
     if (sort === "downloads_desc") return parseCompact(b.downloads) - parseCompact(a.downloads) || a.name.localeCompare(b.name);
     if (sort === "scanned_desc") return scanTime(b).localeCompare(scanTime(a)) || a.name.localeCompare(b.name);
-    return b.score - a.score || a.name.localeCompare(b.name);
+    return b.score - a.score || comparePluginImpact(a, b) || a.name.localeCompare(b.name);
   });
 }
 
@@ -73,4 +73,13 @@ function parseCompact(value: string) {
   if (normalized.endsWith("k")) return parsed * 1_000;
 
   return parsed;
+}
+
+function comparePluginImpact(a: PluginSummary, b: PluginSummary) {
+  return (
+    parseCompact(b.activeInstalls) - parseCompact(a.activeInstalls) ||
+    parseCompact(b.downloads) - parseCompact(a.downloads) ||
+    (b.ratingCount ?? 0) - (a.ratingCount ?? 0) ||
+    (b.rating ?? 0) - (a.rating ?? 0)
+  );
 }

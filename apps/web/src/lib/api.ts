@@ -23,6 +23,7 @@ import type {
   QueueJob,
   TagDetail,
   TagSummary,
+  TrackedPluginSummary,
 } from "@pluginscore/core";
 import { enrichIssueSummary } from "@pluginscore/core";
 import {
@@ -32,6 +33,7 @@ import {
   plugins as samplePlugins,
   queue as sampleQueue,
 } from "@pluginscore/core/sample-data";
+import { getCache } from "@vercel/functions";
 
 type PluginSort =
   | "score_desc"
@@ -92,9 +94,21 @@ const apiBaseUrl = process.env.PLUGINSCORE_API_URL;
 const internalApiToken = process.env.PLUGINSCORE_API_INTERNAL_TOKEN ?? process.env.API_INTERNAL_TOKEN;
 const DEFAULT_API_REVALIDATE_SECONDS = 1_800;
 const PLUGIN_DETAIL_REVALIDATE_SECONDS = 900;
+const STALE_API_CACHE_SECONDS = 21_600;
 const allowSampleFallback =
   process.env.PLUGINSCORE_ALLOW_SAMPLE_DATA === "true" ||
   process.env.NODE_ENV !== "production";
+
+type FetchFromApiOptions = {
+  cache?: RequestCache;
+  headers?: HeadersInit;
+  revalidate?: number;
+};
+
+type RuntimeCacheEntry<T> = {
+  value: T;
+  cachedAt: string;
+};
 
 const sampleStats: ApiStats = {
   indexedPlugins: samplePlugins.length,
@@ -206,6 +220,17 @@ export async function getExternalDomains(limit = 100, minimumPlugins = 1) {
   return fetchFromApi<ExternalDomainSummary[]>(
     `/domains?limit=${limit}&minimumPlugins=${minimumPlugins}`,
     [],
+  );
+}
+
+export async function getSitemapPlugins(limit = 50_000) {
+  return fetchFromApi<TrackedPluginSummary[]>(
+    `/sitemap/plugins?limit=${limit}`,
+    samplePlugins.map((plugin) => ({
+      slug: plugin.slug,
+      version: plugin.version,
+      updatedAt: plugin.lastUpdated,
+    })),
   );
 }
 
@@ -486,11 +511,14 @@ export async function getAuthors(limit = 100, sort: AuthorIndexSort = "installs_
   );
 }
 
-export async function getAuthor(authorName: string) {
+export async function getAuthor(authorName: string, pluginsLimit = 200) {
   const fallback = sampleAuthor(authorName);
+  const params = new URLSearchParams({
+    pluginsLimit: String(Math.max(0, pluginsLimit)),
+  });
 
   return fetchFromApi<AuthorDetail | null>(
-    `/authors/${encodeURIComponent(authorName)}`,
+    `/authors/${encodeURIComponent(authorName)}?${params.toString()}`,
     fallback,
   );
 }
@@ -525,7 +553,7 @@ export async function getIssue(code: string) {
 async function fetchFromApi<T>(
   path: string,
   fallback: T,
-  options: { cache?: RequestCache; headers?: HeadersInit; revalidate?: number } = {},
+  options: FetchFromApiOptions = {},
 ): Promise<T> {
   if (!apiBaseUrl) {
     if (allowSampleFallback) {
@@ -536,6 +564,7 @@ async function fetchFromApi<T>(
   }
 
   try {
+    const cacheKey = publicApiCacheKey(path, options);
     const fetchOptions = options.cache
       ? { cache: options.cache }
       : { next: { revalidate: options.revalidate ?? DEFAULT_API_REVALIDATE_SECONDS } };
@@ -552,14 +581,71 @@ async function fetchFromApi<T>(
       throw new Error(`${response.status} ${await response.text()}`);
     }
 
-    return (await response.json()) as T;
+    const result = (await response.json()) as T;
+
+    if (cacheKey) {
+      await writePublicApiCache(cacheKey, result, options.revalidate);
+    }
+
+    return result;
   } catch (error) {
+    const cacheKey = publicApiCacheKey(path, options);
+    const cached = cacheKey ? await readPublicApiCache<T>(cacheKey) : undefined;
+
+    if (cached !== undefined) {
+      console.warn(`Using cached PluginScore API data for ${path}:`, error);
+      return cached;
+    }
+
     if (allowSampleFallback) {
       console.warn(`Falling back to sample PluginScore data for ${path}:`, error);
       return fallback;
     }
 
     throw error;
+  }
+}
+
+function publicApiCacheKey(path: string, options: FetchFromApiOptions) {
+  if (options.cache === "no-store" || options.headers) {
+    return null;
+  }
+
+  return `public-api:${path}`;
+}
+
+async function readPublicApiCache<T>(key: string) {
+  try {
+    const cached = await getCache({ namespace: "pluginscore-web" }).get(key) as
+      | RuntimeCacheEntry<T>
+      | undefined;
+    return cached?.value;
+  } catch (error) {
+    console.warn(`PluginScore API cache read failed for ${key}:`, error);
+    return undefined;
+  }
+}
+
+async function writePublicApiCache<T>(
+  key: string,
+  value: T,
+  revalidateSeconds = DEFAULT_API_REVALIDATE_SECONDS,
+) {
+  try {
+    await getCache({ namespace: "pluginscore-web" }).set(
+      key,
+      {
+        value,
+        cachedAt: new Date().toISOString(),
+      },
+      {
+        ttl: Math.max(STALE_API_CACHE_SECONDS, revalidateSeconds * 4),
+        tags: ["pluginscore-public-api"],
+        name: "PluginScore public API response",
+      },
+    );
+  } catch (error) {
+    console.warn(`PluginScore API cache write failed for ${key}:`, error);
   }
 }
 
@@ -598,7 +684,7 @@ function sortSamplePlugins(plugins: PluginDetail[], sort: PluginSort, query?: st
     if (sort === "updated_desc") return b.lastUpdated.localeCompare(a.lastUpdated);
     if (sort === "delta_desc") return (b.score - b.previousScore) - (a.score - a.previousScore);
     if (sort === "scanned_desc") return auditCompletedAt(b).localeCompare(auditCompletedAt(a));
-    return b.score - a.score;
+    return b.score - a.score || comparePluginPopularity(a, b);
   });
 }
 

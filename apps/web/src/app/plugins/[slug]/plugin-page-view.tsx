@@ -159,7 +159,7 @@ async function getRelatedPluginTabs(plugin: PluginDetail): Promise<RelatedPlugin
       ),
     ),
     plugin.author
-      ? getAuthor(authorRouteKey(plugin.author, plugin.authorUrl))
+      ? getAuthor(authorRouteKey(plugin.author, plugin.authorUrl), 20)
       : Promise.resolve(null),
   ]);
 

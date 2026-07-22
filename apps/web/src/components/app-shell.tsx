@@ -17,6 +17,16 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
   const stats = await getStats();
   const indexedLabel = stats.indexedPlugins.toLocaleString();
 
+  return <AppShellFrame indexedLabel={indexedLabel}>{children}</AppShellFrame>;
+}
+
+export function AppShellFrame({
+  children,
+  indexedLabel,
+}: {
+  children: React.ReactNode;
+  indexedLabel?: string;
+}) {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b border-line bg-surface">
@@ -47,10 +57,14 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
       </main>
       <footer className="border-t border-line bg-surface">
         <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-4 text-xs text-muted sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <p>
-            <span className="font-mono text-foreground">{indexedLabel}</span>{" "}
-            plugins indexed
-          </p>
+          {indexedLabel ? (
+            <p>
+              <span className="font-mono text-foreground">{indexedLabel}</span>{" "}
+              plugins indexed
+            </p>
+          ) : (
+            <p>PluginScore</p>
+          )}
           <nav className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <Link href="/about" className="hover:text-foreground">
               About

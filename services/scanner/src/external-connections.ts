@@ -37,6 +37,8 @@ const defaultOptions: Required<AnalysisOptions> = {
   maxFindings: 300,
 };
 
+const maxApiUrlLength = 2000;
+
 const scannedExtensions = new Set([
   ".php",
   ".inc",
@@ -491,13 +493,29 @@ function normalizeUrl(rawValue: string | undefined) {
       return null;
     }
 
-    return {
-      url: parsed.toString(),
-      domain,
-    };
+    const url = compactUrlForApi(parsed);
+    if (!url) {
+      return null;
+    }
+
+    return { url, domain };
   } catch {
     return null;
   }
+}
+
+function compactUrlForApi(parsed: URL) {
+  const fullUrl = parsed.toString();
+  if (fullUrl.length <= maxApiUrlLength) {
+    return fullUrl;
+  }
+
+  const compact = new URL(parsed);
+  compact.search = "";
+  compact.hash = "";
+
+  const compactUrl = compact.toString();
+  return compactUrl.length <= maxApiUrlLength ? compactUrl : undefined;
 }
 
 function strongestConfidence(

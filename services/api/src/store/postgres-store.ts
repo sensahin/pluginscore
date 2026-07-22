@@ -59,6 +59,7 @@ import { Pool, type PoolClient } from "pg";
 import type {
   EnqueueJobInput,
   ExternalConnectionSettingsInput,
+  GetAuthorOptions,
   GetExternalDomainOptions,
   ListAuthorsOptions,
   ListExternalDomainsOptions,
@@ -1215,7 +1216,10 @@ export class PostgresStore implements PluginScoreStore {
     return result.rows.map(rowToAuthorSummary);
   }
 
-  async getAuthor(authorName: string): Promise<AuthorDetail | null> {
+  async getAuthor(
+    authorName: string,
+    options: GetAuthorOptions,
+  ): Promise<AuthorDetail | null> {
     const normalized = authorName.trim();
 
     if (!normalized) {
@@ -1302,6 +1306,15 @@ export class PostgresStore implements PluginScoreStore {
       return null;
     }
 
+    const summary = rowToAuthorSummary(summaryRow);
+
+    if (options.pluginsLimit === 0) {
+      return {
+        ...summary,
+        plugins: [],
+      };
+    }
+
     const pluginResult = await this.pool.query(
       `
       ${pluginListSelectSql()}
@@ -1310,12 +1323,10 @@ export class PostgresStore implements PluginScoreStore {
       ${pluginTagsSelectSql()}
       where ${authorKeySql("p")} = $1
       order by coalesce(p.active_installs, 0) desc, p.name asc
-      limit 200
+      limit $2
       `,
-      [String(summaryRow.author_key)],
+      [String(summaryRow.author_key), options.pluginsLimit],
     );
-
-    const summary = rowToAuthorSummary(summaryRow);
 
     return {
       ...summary,
@@ -1389,7 +1400,14 @@ export class PostgresStore implements PluginScoreStore {
       options.sort === "delta_desc";
     const newPopularOnly = options.sort === "new_popular_desc";
     const orderBy = {
-      score_desc: "coalesce(pcs.score, 0) desc, p.slug asc",
+      score_desc: `
+        coalesce(pcs.score, 0) desc,
+        coalesce(p.active_installs, 0) desc,
+        coalesce(p.downloads, 0) desc,
+        coalesce(p.rating_count, 0) desc,
+        coalesce(p.rating, 0) desc,
+        p.slug asc
+      `,
       score_asc: "coalesce(pcs.score, 0) asc, p.slug asc",
       installs_desc: "coalesce(p.active_installs, 0) desc, p.slug asc",
       downloads_desc: "coalesce(p.downloads, 0) desc, p.slug asc",
@@ -1404,6 +1422,13 @@ export class PostgresStore implements PluginScoreStore {
       issues_desc: "coalesce(pcs.total_findings, 0) desc, p.slug asc",
       delta_desc: "(coalesce(pcs.score, 0) - coalesce(pcs.previous_score, pcs.score, 0)) desc, p.slug asc",
     }[options.sort];
+
+    if (options.limit === 0) {
+      return {
+        ...rowToTagSummary(tagRow),
+        plugins: [],
+      };
+    }
 
     const pluginResult = await this.pool.query(
       `
@@ -1520,6 +1545,13 @@ export class PostgresStore implements PluginScoreStore {
 
     if (!summary) {
       return null;
+    }
+
+    if (options.limit === 0) {
+      return {
+        ...summary,
+        plugins: [],
+      };
     }
 
     const pluginResult = await this.pool.query(
@@ -2291,7 +2323,16 @@ export class PostgresStore implements PluginScoreStore {
           select
             pt.tag_id,
             p.id as plugin_id,
-            rank() over (partition by pt.tag_id order by pcs.score desc, p.slug asc)::integer as score_rank,
+            rank() over (
+              partition by pt.tag_id
+              order by
+                pcs.score desc,
+                coalesce(p.active_installs, 0) desc,
+                coalesce(p.downloads, 0) desc,
+                coalesce(p.rating_count, 0) desc,
+                coalesce(p.rating, 0) desc,
+                p.slug asc
+            )::integer as score_rank,
             count(*) over (partition by pt.tag_id)::integer as score_total
           from plugin_tags pt
           join plugins p on p.id = pt.plugin_id
@@ -2618,7 +2659,15 @@ async function refreshPluginRankSnapshots(client: PoolClient) {
     from (
       select
         'best'::text as ranking_key,
-        row_number() over (order by pcs.score desc, p.slug asc)::integer as rank,
+        row_number() over (
+          order by
+            pcs.score desc,
+            coalesce(p.active_installs, 0) desc,
+            coalesce(p.downloads, 0) desc,
+            coalesce(p.rating_count, 0) desc,
+            coalesce(p.rating, 0) desc,
+            p.slug asc
+        )::integer as rank,
         p.id as plugin_id,
         pcs.score::numeric as sort_value
       from plugins p
@@ -3031,7 +3080,14 @@ function pluginListOrderBy(
   }
 
   return {
-    score_desc: "coalesce(pcs.score, 0) desc, p.slug asc",
+    score_desc: `
+      coalesce(pcs.score, 0) desc,
+      coalesce(p.active_installs, 0) desc,
+      coalesce(p.downloads, 0) desc,
+      coalesce(p.rating_count, 0) desc,
+      coalesce(p.rating, 0) desc,
+      p.slug asc
+    `,
     score_asc: "coalesce(pcs.score, 0) asc, p.slug asc",
     downloads_desc: "coalesce(p.downloads, 0) desc, p.slug asc",
     installs_desc: "coalesce(p.active_installs, 0) desc, p.slug asc",

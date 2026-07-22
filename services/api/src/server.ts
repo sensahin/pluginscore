@@ -41,6 +41,10 @@ const listTrackedPluginsQuery = z.object({
   limit: z.coerce.number().int().min(1).max(10000).default(5000),
 });
 
+const sitemapPluginsQuery = z.object({
+  limit: z.coerce.number().int().min(1).max(50000).default(50000),
+});
+
 const pluginHistoryQuery = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
@@ -95,6 +99,10 @@ const listAuthorsQuery = z.object({
     .default("installs_desc"),
 });
 
+const authorDetailQuery = z.object({
+  pluginsLimit: z.coerce.number().int().min(0).max(200).default(200),
+});
+
 const listTagsQuery = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(100),
   minimumPlugins: z.coerce.number().int().min(1).max(100).default(1),
@@ -106,11 +114,11 @@ const listExternalDomainsQuery = z.object({
 });
 
 const externalDomainDetailQuery = z.object({
-  limit: z.coerce.number().int().min(1).max(500).default(100),
+  limit: z.coerce.number().int().min(0).max(500).default(100),
 });
 
 const tagDetailQuery = z.object({
-  limit: z.coerce.number().int().min(1).max(500).default(100),
+  limit: z.coerce.number().int().min(0).max(500).default(100),
   sort: z
     .enum([
       "score_desc",
@@ -207,6 +215,10 @@ const enqueueJobBody = z.object({
   pluginCheckVersion: z.string().min(1).optional(),
   scoringModelVersion: z.string().min(1).optional(),
   force: z.boolean().optional(),
+});
+
+const bulkEnqueueJobsBody = z.object({
+  jobs: z.array(z.unknown()).min(1).max(1000),
 });
 
 const findingSchema = z.object({
@@ -383,6 +395,11 @@ export async function createServer(config: ApiConfig, store: PluginScoreStore) {
     });
   });
 
+  app.get("/sitemap/plugins", async (request) => {
+    const query = sitemapPluginsQuery.parse(request.query);
+    return store.listTrackedPlugins(query);
+  });
+
   app.get("/plugins/:slug", async (request, reply) => {
     const { slug } = z.object({ slug: z.string() }).parse(request.params);
     const plugin = await store.getPlugin(slug);
@@ -527,7 +544,10 @@ export async function createServer(config: ApiConfig, store: PluginScoreStore) {
 
   app.get("/authors/:author", async (request, reply) => {
     const { author } = z.object({ author: z.string() }).parse(request.params);
-    const result = await store.getAuthor(decodeURIComponent(author));
+    const query = authorDetailQuery.parse(request.query);
+    const result = await store.getAuthor(decodeURIComponent(author), {
+      pluginsLimit: query.pluginsLimit,
+    });
 
     if (!result) {
       return reply.code(404).send({ error: "author_not_found" });
@@ -637,6 +657,72 @@ export async function createServer(config: ApiConfig, store: PluginScoreStore) {
     return reply.code(result.queued ? 202 : 200).send(result);
   });
 
+  app.post("/jobs/bulk", { preHandler: requireInternalAuth }, async (request, reply) => {
+    const parsedBody = bulkEnqueueJobsBody.safeParse(request.body);
+
+    if (!parsedBody.success) {
+      return reply.code(400).send({
+        error: "invalid_bulk_enqueue_body",
+        details: zodIssues(parsedBody.error),
+      });
+    }
+
+    let queued = 0;
+    let satisfied = 0;
+    let failed = 0;
+    const results: Array<{
+      slug: string;
+      id?: number;
+      queued: boolean;
+      error?: string;
+    }> = [];
+
+    for (const rawJob of parsedBody.data.jobs) {
+      const parsedJob = enqueueJobBody.safeParse(rawJob);
+
+      if (!parsedJob.success) {
+        failed += 1;
+        results.push({
+          slug: readUnknownSlug(rawJob),
+          queued: false,
+          error: zodIssues(parsedJob.error).map((issue) => `${issue.path}: ${issue.message}`).join("; "),
+        });
+        continue;
+      }
+
+      try {
+        const result = await store.enqueueJob(parsedJob.data);
+
+        if (result.queued) {
+          queued += 1;
+        } else {
+          satisfied += 1;
+        }
+
+        results.push({
+          slug: parsedJob.data.slug,
+          id: result.id,
+          queued: result.queued,
+        });
+      } catch (error) {
+        failed += 1;
+        results.push({
+          slug: parsedJob.data.slug,
+          queued: false,
+          error: (error as Error).message,
+        });
+      }
+    }
+
+    return reply.send({
+      checked: parsedBody.data.jobs.length,
+      queued,
+      satisfied,
+      failed,
+      results,
+    });
+  });
+
   app.get("/jobs/next", { preHandler: requireInternalAuth }, async (request, reply) => {
     const job = await store.claimNextJob();
 
@@ -649,7 +735,16 @@ export async function createServer(config: ApiConfig, store: PluginScoreStore) {
 
   app.post("/jobs/:id/complete", { preHandler: requireInternalAuth }, async (request, reply) => {
     const { id } = z.object({ id: z.coerce.number().int().positive() }).parse(request.params);
-    const body = completeJobBody.parse(request.body);
+    const parsedBody = completeJobBody.safeParse(request.body);
+
+    if (!parsedBody.success) {
+      return reply.code(400).send({
+        error: "invalid_job_completion",
+        details: zodIssues(parsedBody.error),
+      });
+    }
+
+    const body = parsedBody.data;
     await store.completeJob(id, body);
     return reply.code(204).send();
   });
@@ -693,6 +788,21 @@ function normalizeSlug(slug: string) {
     .replace(/\/$/, "")
     .replace(/[^a-z0-9-]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+function readUnknownSlug(value: unknown) {
+  if (value && typeof value === "object" && "slug" in value && typeof value.slug === "string") {
+    return value.slug;
+  }
+
+  return "unknown";
+}
+
+function zodIssues(error: z.ZodError) {
+  return error.issues.map((issue) => ({
+    path: issue.path.join(".") || "body",
+    message: issue.message,
+  }));
 }
 
 function hashIp(ip: string, secret?: string) {

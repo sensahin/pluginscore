@@ -7,6 +7,7 @@ import { AppShell } from "@/components/app-shell";
 import { PaginationControls } from "@/components/pagination-controls";
 import { PluginListTable } from "@/components/plugin-list-table";
 import { getPluginsPage, getTag, getTags } from "@/lib/api";
+import type { PluginSummary } from "@/lib/plugin-score-data";
 import {
   PLUGIN_DIRECTORY_PER_PAGE,
   titleWithPage,
@@ -64,7 +65,9 @@ type TagPageViewProps = {
   page?: number;
 };
 
-const STATIC_TAG_LIMIT = 100;
+const STATIC_TAG_LIMIT = 50;
+const STATIC_TAG_SORT_LIMIT = 10;
+const TAG_SUMMARY_PREVIEW_LIMIT = 0;
 
 const tagSortBySegment = Object.fromEntries(
   (Object.keys(tagSorts) as TagSort[]).map((sort) => [
@@ -79,7 +82,7 @@ export async function generateTagStaticParams() {
 }
 
 export async function generateTagSortStaticParams() {
-  const tags = await getTags(STATIC_TAG_LIMIT, 1);
+  const tags = await getTags(STATIC_TAG_SORT_LIMIT, 3);
   const sortSegments = (Object.keys(tagSorts) as TagSort[])
     .filter((sort) => sort !== "score_desc")
     .map((sort) => tagSorts[sort].segment);
@@ -112,9 +115,8 @@ export async function generateTagMetadata({
   sort = "score_desc",
   page = 1,
 }: TagPageViewProps): Promise<Metadata> {
-  const detail = await getTag(tag, sort);
+  const detail = await getTag(tag, sort, tagDetailLimit(sort, page));
   const displayName = seoDisplayName(detail?.name ?? titleFromTagSlug(tag));
-  const pluginNames = detail?.plugins.slice(0, 5).map((plugin) => plugin.name) ?? [];
   const scoreText =
     detail?.averageScore !== undefined
       ? ` Average score: ${detail.averageScore}/100.`
@@ -139,7 +141,6 @@ export async function generateTagMetadata({
       "Plugin Check findings",
       "WordPress plugin security signals",
       "WordPress plugin ranking",
-      ...pluginNames,
     ],
   };
 }
@@ -155,20 +156,22 @@ export async function TagPageView({
     sort === "scanned_desc" ||
     sort === "issues_desc" ||
     sort === "delta_desc";
-  const [detail, plugins] = await Promise.all([
-    getTag(tag, sort, 10),
-    getPluginsPage({
+  const detail = await getTag(tag, sort, tagDetailLimit(sort, page));
+
+  if (!detail) {
+    notFound();
+  }
+
+  const plugins =
+    canUseTagDetailPlugins(sort, page)
+      ? tagDetailPluginsPage(detail.plugins, tagTotalForSort(detail, sort))
+      : await getPluginsPage({
       page,
       perPage: PLUGIN_DIRECTORY_PER_PAGE,
       sort,
       audited: auditedOnly,
       tag,
-    }),
-  ]);
-
-  if (!detail) {
-    notFound();
-  }
+    });
 
   const rankOffset = (plugins.page - 1) * plugins.perPage;
   const displayName = seoDisplayName(detail.name);
@@ -185,22 +188,8 @@ export async function TagPageView({
       itemListElement: plugins.items.slice(0, 10).map((plugin, index) => ({
         "@type": "ListItem",
         position: rankOffset + index + 1,
-        item: {
-          "@type": "SoftwareApplication",
-          name: plugin.name,
-          applicationCategory: "WordPress plugin",
-          operatingSystem: "WordPress",
-          url: `https://pluginscore.com/plugins/${encodeURIComponent(plugin.slug)}`,
-          softwareVersion: plugin.version,
-          aggregateRating: plugin.audited
-            ? {
-                "@type": "AggregateRating",
-                ratingValue: plugin.score,
-                bestRating: 100,
-                worstRating: 0,
-              }
-            : undefined,
-        },
+        name: plugin.name,
+        url: `https://pluginscore.com/plugins/${encodeURIComponent(plugin.slug)}`,
       })),
     },
   };
@@ -341,6 +330,37 @@ function tagPageTitle(displayName: string, sort: TagSort) {
   }
 
   return `${tagSorts[sort].titleSuffix} ${displayName} WordPress Plugins`;
+}
+
+function tagDetailLimit(sort: TagSort, page: number) {
+  return canUseTagDetailPlugins(sort, page)
+    ? PLUGIN_DIRECTORY_PER_PAGE
+    : TAG_SUMMARY_PREVIEW_LIMIT;
+}
+
+function canUseTagDetailPlugins(sort: TagSort, page: number) {
+  return page === 1 && sort !== "new_popular_desc";
+}
+
+function tagTotalForSort(
+  detail: NonNullable<Awaited<ReturnType<typeof getTag>>>,
+  sort: TagSort,
+) {
+  return sort === "installs_desc" || sort === "downloads_desc"
+    ? detail.pluginCount
+    : detail.auditedPluginCount;
+}
+
+function tagDetailPluginsPage(plugins: PluginSummary[], total: number) {
+  return {
+    items: plugins,
+    page: 1,
+    perPage: PLUGIN_DIRECTORY_PER_PAGE,
+    total,
+    totalPages: Math.max(1, Math.ceil(total / PLUGIN_DIRECTORY_PER_PAGE)),
+    hasNextPage: total > plugins.length,
+    hasPreviousPage: false,
+  };
 }
 
 function formatCompact(value: number) {

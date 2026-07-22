@@ -25,6 +25,7 @@ import { findIssue, findPlugin, issues, plugins, queue as sampleQueue } from "@p
 import type {
   EnqueueJobInput,
   ExternalConnectionSettingsInput,
+  GetAuthorOptions,
   ListPluginReportsOptions,
   ListQueueOptions,
   ListAuthorsOptions,
@@ -256,7 +257,7 @@ export class MemoryStore implements PluginScoreStore {
       if (options.sort === "scanned_desc") {
         return auditCompletedAt(b).localeCompare(auditCompletedAt(a)) || a.slug.localeCompare(b.slug);
       }
-      return b.score - a.score || a.slug.localeCompare(b.slug);
+      return b.score - a.score || comparePluginPopularity(a, b);
     });
 
     const tagFiltered = options.tag
@@ -462,7 +463,10 @@ export class MemoryStore implements PluginScoreStore {
       .map(({ plugins: _plugins, ...summary }) => summary);
   }
 
-  async getAuthor(authorName: string): Promise<AuthorDetail | null> {
+  async getAuthor(
+    authorName: string,
+    options: GetAuthorOptions,
+  ): Promise<AuthorDetail | null> {
     const normalized = authorName.trim().toLowerCase();
 
     if (!normalized) {
@@ -476,7 +480,15 @@ export class MemoryStore implements PluginScoreStore {
       })
       .sort((a, b) => parseDownloads(b.activeInstalls) - parseDownloads(a.activeInstalls) || a.name.localeCompare(b.name));
 
-    return authorPlugins.length ? pluginsToAuthorDetail(authorPlugins[0]?.author ?? authorName, authorPlugins) : null;
+    if (!authorPlugins.length) {
+      return null;
+    }
+
+    const detail = pluginsToAuthorDetail(authorPlugins[0]?.author ?? authorName, authorPlugins);
+    return {
+      ...detail,
+      plugins: detail.plugins.slice(0, options.pluginsLimit),
+    };
   }
 
   async listTags(options: ListTagsOptions): Promise<TagSummary[]> {
@@ -520,7 +532,7 @@ export class MemoryStore implements PluginScoreStore {
         if (options.sort === "scanned_desc") return auditCompletedAt(b).localeCompare(auditCompletedAt(a));
         if (options.sort === "issues_desc") return b.findings - a.findings;
         if (options.sort === "delta_desc") return scoreDelta(b) - scoreDelta(a) || a.slug.localeCompare(b.slug);
-        return b.score - a.score || a.slug.localeCompare(b.slug);
+        return b.score - a.score || comparePluginPopularity(a, b);
       })
       .slice(0, options.limit);
 

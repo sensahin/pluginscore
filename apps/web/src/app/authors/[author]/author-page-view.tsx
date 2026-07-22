@@ -66,7 +66,8 @@ type AuthorPageViewProps = {
   page?: number;
 };
 
-const STATIC_AUTHOR_LIMIT = 100;
+const STATIC_AUTHOR_LIMIT = 50;
+const STATIC_AUTHOR_SORT_LIMIT = 10;
 
 const authorSortBySegment = Object.fromEntries(
   (Object.keys(authorSorts) as AuthorSort[]).map((sort) => [
@@ -81,7 +82,7 @@ export async function generateAuthorStaticParams() {
 }
 
 export async function generateAuthorSortStaticParams() {
-  const authors = await getAuthors(STATIC_AUTHOR_LIMIT);
+  const authors = await getAuthors(STATIC_AUTHOR_SORT_LIMIT);
   const sortSegments = (Object.keys(authorSorts) as AuthorSort[])
     .filter((sort) => sort !== "score_desc")
     .map((sort) => authorSorts[sort].segment);
@@ -119,9 +120,8 @@ export async function generateAuthorMetadata({
   page = 1,
 }: AuthorPageViewProps): Promise<Metadata> {
   const decoded = decodeURIComponent(author);
-  const detail = await getAuthor(decoded);
+  const detail = await getAuthor(decoded, 0);
   const displayName = detail?.name ?? decoded;
-  const pluginNames = detail?.plugins.slice(0, 5).map((plugin) => plugin.name) ?? [];
   const scoreText =
     detail?.averageScore !== undefined
       ? `, average score ${detail.averageScore}/100`
@@ -147,7 +147,6 @@ export async function generateAuthorMetadata({
       "WordPress plugin author",
       "WordPress plugin developer",
       "PluginScore",
-      ...pluginNames,
     ],
     authors: [{ name: displayName }],
     robots: {
@@ -163,7 +162,7 @@ export async function AuthorPageView({
   page = 1,
 }: AuthorPageViewProps) {
   const decoded = decodeURIComponent(author);
-  const detail = await getAuthor(decoded);
+  const detail = await getAuthor(decoded, 80);
 
   if (!detail) {
     notFound();
@@ -198,20 +197,8 @@ export async function AuthorPageView({
         itemListElement: plugins.items.slice(0, 10).map((plugin, index) => ({
           "@type": "ListItem",
           position: rankOffset + index + 1,
-          item: {
-            "@type": "SoftwareApplication",
-            name: plugin.name,
-            applicationCategory: "WordPress plugin",
-            operatingSystem: "WordPress",
-            url: `https://pluginscore.com/plugins/${encodeURIComponent(plugin.slug)}`,
-            softwareVersion: plugin.version,
-            aggregateRating: {
-              "@type": "AggregateRating",
-              ratingValue: plugin.score,
-              bestRating: 100,
-              worstRating: 0,
-            },
-          },
+          name: plugin.name,
+          url: `https://pluginscore.com/plugins/${encodeURIComponent(plugin.slug)}`,
         })),
       },
     },

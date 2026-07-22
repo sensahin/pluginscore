@@ -98,6 +98,10 @@ export type ListAuthorsOptions = {
     | "scanned_desc";
 };
 
+export type GetAuthorOptions = {
+  pluginsLimit: number;
+};
+
 export type ListTagsOptions = {
   limit: number;
   minimumPlugins?: number;
@@ -160,7 +164,7 @@ export interface PluginScoreStore {
   pluginReportStats(): Promise<PluginReportStats>;
   updatePluginReport(id: number, input: PluginReportUpdateInput): Promise<PluginReport | null>;
   listAuthors(options: ListAuthorsOptions): Promise<AuthorSummary[]>;
-  getAuthor(authorName: string): Promise<AuthorDetail | null>;
+  getAuthor(authorName: string, options: GetAuthorOptions): Promise<AuthorDetail | null>;
   listTags(options: ListTagsOptions): Promise<TagSummary[]>;
   getTag(tagSlug: string, options: GetTagOptions): Promise<TagDetail | null>;
   listExternalDomains(options: ListExternalDomainsOptions): Promise<ExternalDomainSummary[]>;
