@@ -176,11 +176,13 @@ export class MemoryStore implements PluginScoreStore {
         runningJobMaxAttempts: 0,
         scanRetryBackoffSeconds: 0,
         scanTerminalTimeoutAttempts: 0,
+        scanTerminalFailureAttempts: 0,
       },
       failures: {
         failedAuditRuns: 0,
         timeoutAuditRuns: 0,
         repeatedTimeoutPlugins: 0,
+        repeatedFailurePlugins: 0,
         recent: [],
       },
       userSubmissions: {

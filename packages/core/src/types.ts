@@ -401,11 +401,13 @@ export type OperationsSummary = {
     runningJobMaxAttempts: number;
     scanRetryBackoffSeconds: number;
     scanTerminalTimeoutAttempts: number;
+    scanTerminalFailureAttempts: number;
   };
   failures: {
     failedAuditRuns: number;
     timeoutAuditRuns: number;
     repeatedTimeoutPlugins: number;
+    repeatedFailurePlugins: number;
     recent: OperationsRecentFailure[];
   };
   userSubmissions: {
@@ -632,4 +634,5 @@ export type ScanFailPayload = {
   timedOut?: boolean;
   stderr?: string;
   durationMs?: number;
+  exitCode?: number;
 };

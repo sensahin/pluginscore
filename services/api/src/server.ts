@@ -319,6 +319,7 @@ const failJobBody = z.object({
   timedOut: z.boolean().optional(),
   stderr: z.string().optional(),
   durationMs: z.number().int().nonnegative().optional(),
+  exitCode: z.number().int().optional(),
 });
 
 export async function createServer(config: ApiConfig, store: PluginScoreStore) {

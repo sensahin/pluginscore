@@ -47,8 +47,37 @@ export async function runPluginCheck(
   const startedAt = Date.now();
   const output = await runShell(command, config.scanTimeoutMs);
   const durationMs = Date.now() - startedAt;
+
+  if (output.exitCode !== 0) {
+    const message = output.exitCode === 137
+      ? "Plugin Check command was killed (exit 137), usually after exceeding the scanner memory limit"
+      : `Plugin Check command exited with code ${output.exitCode}`;
+
+    throw new ScanCommandError(message, {
+      stderr: commandDiagnostics(output.stderr, output.stdout),
+      durationMs,
+      exitCode: output.exitCode,
+    });
+  }
+
   const reportText = await readReportText(paths.jsonPath, output.stdout);
-  const rawReport = parsePluginCheckReport(reportText);
+  let rawReport: unknown;
+
+  try {
+    rawReport = parsePluginCheckReport(reportText);
+  } catch (error) {
+    if (error instanceof ScanCommandError) {
+      throw new ScanCommandError(error.message, {
+        ...error.options,
+        stderr: commandDiagnostics(output.stderr, reportText),
+        durationMs,
+        exitCode: output.exitCode,
+      });
+    }
+
+    throw error;
+  }
+
   const findings = normalizePluginCheckReport(rawReport);
 
   return {
@@ -307,6 +336,15 @@ async function readReportText(jsonPath: string, stdout: string) {
 
 function shellEscape(value: string) {
   return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function commandDiagnostics(stderr: string, stdout: string) {
+  const details = [
+    stderr.trim() ? `stderr:\n${stderr.trim()}` : "",
+    stdout.trim() ? `stdout:\n${stdout.trim()}` : "",
+  ].filter(Boolean).join("\n\n");
+
+  return details ? details.slice(0, 8_000) : undefined;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

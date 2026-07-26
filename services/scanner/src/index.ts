@@ -124,6 +124,7 @@ async function scanOnce() {
         timedOut: scanError?.options.timedOut,
         stderr: scanError?.options.stderr,
         durationMs: scanError?.options.durationMs ?? Date.now() - startedAt,
+        exitCode: scanError?.options.exitCode,
       });
     } catch (reportError) {
       console.error(

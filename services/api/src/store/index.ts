@@ -7,6 +7,7 @@ export type StoreOptions = {
   runningJobMaxAttempts?: number;
   scanRetryBackoffSeconds?: number;
   scanTerminalTimeoutAttempts?: number;
+  scanTerminalFailureAttempts?: number;
   pluginCheckVersion?: string;
   externalConnectionAnalysisDisabled?: boolean;
 };

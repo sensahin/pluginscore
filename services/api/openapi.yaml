@@ -145,6 +145,8 @@ components:
         durationMs:
           type: integer
           minimum: 0
+        exitCode:
+          type: integer
     PluginSummary:
       type: object
       required: [slug, name, version, score, activeInstalls, downloads, lastUpdated, findings, errors, warnings, band, audited]

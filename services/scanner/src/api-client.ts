@@ -94,6 +94,7 @@ export class PluginScoreApiClient {
         }
 
         lastError = new Error(`${path} returned retryable status ${response.status}`);
+        await response.body?.cancel().catch(() => undefined);
       } catch (error) {
         lastError = error as Error;
 

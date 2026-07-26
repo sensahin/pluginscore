@@ -31,7 +31,7 @@ until MYSQL_PWD="${WP_DB_PASSWORD}" mysqladmin ping \
   -h "${DB_HOST_ONLY}" \
   "${DB_PORT_ARGS[@]}" \
   -u "${WP_DB_USER}" \
-  --silent; do
+  --silent >/dev/null 2>&1; do
   sleep 2
 done
 

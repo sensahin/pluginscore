@@ -8,7 +8,7 @@ PLUGIN_CHECK_MODE="${PLUGIN_CHECK_MODE:-new}"
 
 mkdir -p "$(dirname "${JSON_PATH}")"
 
-/usr/local/bin/ensure-wp-runtime
+/usr/local/bin/ensure-wp-runtime >/dev/null
 
 ARGS=(
   --path="${WP_PATH}"

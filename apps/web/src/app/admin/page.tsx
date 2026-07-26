@@ -435,6 +435,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                   <Meta label="Max attempts" value={operations.retryPolicy.runningJobMaxAttempts.toLocaleString()} />
                   <Meta label="Retry backoff" value={formatDuration(operations.retryPolicy.scanRetryBackoffSeconds * 1000)} />
                   <Meta label="Terminal timeouts" value={operations.retryPolicy.scanTerminalTimeoutAttempts.toLocaleString()} />
+                  <Meta label="Terminal failures" value={operations.retryPolicy.scanTerminalFailureAttempts.toLocaleString()} />
+                  <Meta label="Suppressed timeout groups" value={operations.failures.repeatedTimeoutPlugins.toLocaleString()} />
+                  <Meta label="Suppressed failure groups" value={operations.failures.repeatedFailurePlugins.toLocaleString()} />
                 </div>
               </section>
 

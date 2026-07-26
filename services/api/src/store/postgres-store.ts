@@ -84,6 +84,7 @@ export class PostgresStore implements PluginScoreStore {
   private runningJobMaxAttempts: number;
   private scanRetryBackoffSeconds: number;
   private scanTerminalTimeoutAttempts: number;
+  private scanTerminalFailureAttempts: number;
   private pluginCheckVersion: string;
   private externalConnectionAnalysisDisabled: boolean;
 
@@ -101,6 +102,7 @@ export class PostgresStore implements PluginScoreStore {
     this.runningJobMaxAttempts = options.runningJobMaxAttempts ?? 3;
     this.scanRetryBackoffSeconds = options.scanRetryBackoffSeconds ?? 21_600;
     this.scanTerminalTimeoutAttempts = options.scanTerminalTimeoutAttempts ?? 2;
+    this.scanTerminalFailureAttempts = options.scanTerminalFailureAttempts ?? 3;
     this.pluginCheckVersion = options.pluginCheckVersion ?? "unknown";
     this.externalConnectionAnalysisDisabled = options.externalConnectionAnalysisDisabled ?? false;
   }
@@ -119,7 +121,15 @@ export class PostgresStore implements PluginScoreStore {
         (select count(*)::integer from audit_runs where status = 'complete') as completed_scans,
         (select count(*)::integer from scan_jobs where status = 'queued') as queued_jobs,
         (select count(*)::integer from scan_jobs where status = 'running') as running_jobs,
-        (select count(*)::integer from scan_jobs where status = 'failed') as failed_jobs,
+        (
+          select count(*)::integer
+          from (
+            select distinct on (plugin_id, target_version) status
+            from scan_jobs
+            order by plugin_id, target_version, updated_at desc, id desc
+          ) latest_jobs
+          where status = 'failed'
+        ) as failed_jobs,
         (select count(*)::integer from finding_codes) as issue_codes,
         (select count(*)::integer from plugin_search_events) as recent_searches
       `,
@@ -189,7 +199,15 @@ export class PostgresStore implements PluginScoreStore {
           (select count(*)::integer from audit_runs where status = 'complete') as completed_scans,
           (select count(*)::integer from scan_jobs where status = 'queued') as queued_jobs,
           (select count(*)::integer from scan_jobs where status = 'running') as running_jobs,
-          (select count(*)::integer from scan_jobs where status = 'failed') as failed_jobs,
+          (
+            select count(*)::integer
+            from (
+              select distinct on (plugin_id, target_version) status
+              from scan_jobs
+              order by plugin_id, target_version, updated_at desc, id desc
+            ) latest_jobs
+            where status = 'failed'
+          ) as failed_jobs,
           (
             select count(*)::integer
             from scan_jobs
@@ -292,49 +310,67 @@ export class PostgresStore implements PluginScoreStore {
             count(*)::integer as timeout_count
           from audit_runs
           where status = 'timeout'
-          group by plugin_id, plugin_version, plugin_check_version, scoring_model_version
+          group by
+            plugin_id,
+            plugin_version,
+            plugin_check_version,
+            scoring_model_version
+        ),
+        failure_groups as (
+          select
+            plugin_id,
+            plugin_version,
+            plugin_check_version,
+            scoring_model_version,
+            md5(coalesce(stderr, '')) as failure_signature,
+            count(*)::integer as failure_count
+          from audit_runs
+          where status = 'failed'
+          group by
+            plugin_id,
+            plugin_version,
+            plugin_check_version,
+            scoring_model_version,
+            md5(coalesce(stderr, ''))
         )
         select
           (select count(*)::integer from audit_runs where status = 'failed') as failed_audit_runs,
           (select count(*)::integer from audit_runs where status = 'timeout') as timeout_audit_runs,
-          (select count(*)::integer from timeout_groups where timeout_count >= $1) as repeated_timeout_plugins
+          (select count(*)::integer from timeout_groups where timeout_count >= $1) as repeated_timeout_plugins,
+          (select count(*)::integer from failure_groups where failure_count >= $2) as repeated_failure_plugins
         `,
-        [this.scanTerminalTimeoutAttempts],
+        [this.scanTerminalTimeoutAttempts, this.scanTerminalFailureAttempts],
       ),
       this.pool.query(`
-        select *
-        from (
-          select
-            p.slug as plugin,
-            p.name,
-            sj.target_version as version,
-            'failed'::text as state,
-            sj.attempts,
-            left(coalesce(sj.last_error, ''), 240) as last_error,
-            sj.updated_at,
-            null::timestamptz as completed_at,
-            null::integer as duration_ms
+        with latest_jobs as materialized (
+          select distinct on (sj.plugin_id, sj.target_version)
+            sj.*
           from scan_jobs sj
-          join plugins p on p.id = sj.plugin_id
-          where sj.status = 'failed'
-
-          union all
-
-          select
-            p.slug as plugin,
-            p.name,
-            ar.plugin_version as version,
-            ar.status as state,
-            null::integer as attempts,
-            left(coalesce(ar.stderr, ''), 240) as last_error,
-            null::timestamptz as updated_at,
-            ar.completed_at,
-            ar.duration_ms
+          order by sj.plugin_id, sj.target_version, sj.updated_at desc, sj.id desc
+        )
+        select
+          p.slug as plugin,
+          p.name,
+          sj.target_version as version,
+          coalesce(audit.status, 'failed') as state,
+          sj.attempts,
+          left(coalesce(sj.last_error, audit.stderr, ''), 240) as last_error,
+          sj.updated_at,
+          audit.completed_at,
+          audit.duration_ms
+        from latest_jobs sj
+        join plugins p on p.id = sj.plugin_id
+        left join lateral (
+          select ar.status, ar.stderr, ar.completed_at, ar.duration_ms
           from audit_runs ar
-          join plugins p on p.id = ar.plugin_id
-          where ar.status in ('failed', 'timeout')
-        ) recent_failures
-        order by coalesce(updated_at, completed_at) desc nulls last
+          where ar.plugin_id = sj.plugin_id
+            and ar.plugin_version = sj.target_version
+            and ar.status in ('failed', 'timeout')
+          order by ar.completed_at desc nulls last, ar.id desc
+          limit 1
+        ) audit on true
+        where sj.status = 'failed'
+        order by sj.updated_at desc, sj.id desc
         limit 8
       `),
       this.pool.query(`
@@ -470,11 +506,13 @@ export class PostgresStore implements PluginScoreStore {
         runningJobMaxAttempts: this.runningJobMaxAttempts,
         scanRetryBackoffSeconds: this.scanRetryBackoffSeconds,
         scanTerminalTimeoutAttempts: this.scanTerminalTimeoutAttempts,
+        scanTerminalFailureAttempts: this.scanTerminalFailureAttempts,
       },
       failures: {
         failedAuditRuns: Number(failureResult.rows[0]?.failed_audit_runs ?? 0),
         timeoutAuditRuns: Number(failureResult.rows[0]?.timeout_audit_runs ?? 0),
         repeatedTimeoutPlugins: Number(failureResult.rows[0]?.repeated_timeout_plugins ?? 0),
+        repeatedFailurePlugins: Number(failureResult.rows[0]?.repeated_failure_plugins ?? 0),
         recent: recentFailureResult.rows.map(rowToOperationsRecentFailure),
       },
       userSubmissions: {
@@ -1720,9 +1758,20 @@ export class PostgresStore implements PluginScoreStore {
   async listQueue(options: ListQueueOptions): Promise<QueueJob[]> {
     const result = await this.pool.query(
       `
-      with selected_jobs as materialized (
-        select sj.*
+      with ranked_jobs as materialized (
+        select
+          sj.*,
+          row_number() over (
+            partition by sj.plugin_id, sj.target_version
+            order by sj.updated_at desc, sj.id desc
+          ) as job_rank
         from scan_jobs sj
+      ),
+      selected_jobs as materialized (
+        select sj.*
+        from ranked_jobs sj
+        where sj.status in ('running', 'queued')
+          or sj.job_rank = 1
         order by
           case sj.status
             when 'running' then 0
@@ -1982,20 +2031,39 @@ export class PostgresStore implements PluginScoreStore {
   ) {
     const result = await client.query<{
       timeout_count: number;
+      failure_count: number;
       recent_failure_count: number;
     }>(
       `
+      with matching_runs as materialized (
+        select status, completed_at, stderr
+        from audit_runs
+        where plugin_id = $1
+          and plugin_version = $2
+          and status in ('failed', 'timeout')
+          and ($3::text is null or plugin_check_version = $3)
+          and ($4::text is null or scoring_model_version = $4)
+      ),
+      latest_failure as (
+        select md5(coalesce(stderr, '')) as failure_signature
+        from matching_runs
+        where status = 'failed'
+        order by completed_at desc nulls last
+        limit 1
+      )
       select
         count(*) filter (where status = 'timeout')::integer as timeout_count,
         count(*) filter (
+          where status = 'failed'
+            and md5(coalesce(stderr, '')) = (
+              select failure_signature
+              from latest_failure
+            )
+        )::integer as failure_count,
+        count(*) filter (
           where completed_at > now() - make_interval(secs => $5::integer)
         )::integer as recent_failure_count
-      from audit_runs
-      where plugin_id = $1
-        and plugin_version = $2
-        and status in ('failed', 'timeout')
-        and ($3::text is null or plugin_check_version = $3)
-        and ($4::text is null or scoring_model_version = $4)
+      from matching_runs
       `,
       [
         pluginId,
@@ -2006,11 +2074,20 @@ export class PostgresStore implements PluginScoreStore {
       ],
     );
 
-    const row = result.rows[0] ?? { timeout_count: 0, recent_failure_count: 0 };
+    const row = result.rows[0] ?? {
+      timeout_count: 0,
+      failure_count: 0,
+      recent_failure_count: 0,
+    };
     const timeoutCount = Number(row.timeout_count ?? 0);
+    const failureCount = Number(row.failure_count ?? 0);
     const recentFailureCount = Number(row.recent_failure_count ?? 0);
 
     if (this.scanTerminalTimeoutAttempts > 0 && timeoutCount >= this.scanTerminalTimeoutAttempts) {
+      return true;
+    }
+
+    if (this.scanTerminalFailureAttempts > 0 && failureCount >= this.scanTerminalFailureAttempts) {
       return true;
     }
 
@@ -2305,12 +2382,12 @@ export class PostgresStore implements PluginScoreStore {
         insert into audit_runs (
           plugin_id, plugin_version, plugin_check_version,
           scoring_model_version, source_download_url, status,
-          timed_out, duration_ms, stderr, trigger_reason, completed_at
+          exit_code, timed_out, duration_ms, stderr, trigger_reason, completed_at
         )
         select
           p.id, sj.target_version, $2, $3, p.download_url,
           case when $4 then 'timeout' else 'failed' end,
-          $4, $5, $6, sj.reason, now()
+          $5, $4, $6, $7, sj.reason, now()
         from scan_jobs sj
         join plugins p on p.id = sj.plugin_id
         where sj.id = $1
@@ -2320,6 +2397,7 @@ export class PostgresStore implements PluginScoreStore {
           payload.pluginCheckVersion ?? "unknown",
           payload.scoringModelVersion ?? SCORING_MODEL_VERSION,
           payload.timedOut ?? false,
+          payload.exitCode ?? null,
           payload.durationMs ?? null,
           payload.stderr ?? payload.message,
         ],
