@@ -56,7 +56,7 @@ import {
   scoreAuditSummary,
   summarizeFindings,
 } from "@pluginscore/scoring";
-import { Pool, type PoolClient } from "pg";
+import { Pool, type PoolClient, type QueryConfig } from "pg";
 import type {
   EnqueueJobInput,
   ExternalConnectionSettingsInput,
@@ -2893,8 +2893,9 @@ async function refreshFindingCodeStats(client: PoolClient, codes: string[]) {
     return;
   }
 
-  await client.query(
-    `
+  await client.query("set local statement_timeout = 45000");
+  await client.query({
+    text: `
     with requested_codes as (
       select distinct unnest($1::text[]) as code
     ),
@@ -2914,8 +2915,10 @@ async function refreshFindingCodeStats(client: PoolClient, codes: string[]) {
       affected_plugins = excluded.affected_plugins,
       updated_at = now()
     `,
-    [uniqueCodes],
-  );
+    values: [uniqueCodes],
+    query_timeout: 46_000,
+  } as QueryConfig & { query_timeout: number });
+  await client.query("set local statement_timeout = 8000");
 }
 
 async function refreshPluginRankSnapshots(client: PoolClient) {
