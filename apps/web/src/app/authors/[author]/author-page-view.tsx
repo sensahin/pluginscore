@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AlertTriangle, Download, ExternalLink, Gauge, Package, User } from "lucide-react";
-import type { ReactNode } from "react";
+import { cache, type ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
 import { PaginationControls } from "@/components/pagination-controls";
 import { PluginListTable } from "@/components/plugin-list-table";
@@ -68,6 +68,10 @@ type AuthorPageViewProps = {
 
 const STATIC_AUTHOR_LIMIT = 50;
 const STATIC_AUTHOR_SORT_LIMIT = 10;
+const AUTHOR_PLUGIN_LIMIT = 80;
+const getAuthorPageData = cache((author: string) =>
+  getAuthor(author, AUTHOR_PLUGIN_LIMIT),
+);
 
 const authorSortBySegment = Object.fromEntries(
   (Object.keys(authorSorts) as AuthorSort[]).map((sort) => [
@@ -120,7 +124,7 @@ export async function generateAuthorMetadata({
   page = 1,
 }: AuthorPageViewProps): Promise<Metadata> {
   const decoded = decodeURIComponent(author);
-  const detail = await getAuthor(decoded, 0);
+  const detail = await getAuthorPageData(decoded);
   const displayName = detail?.name ?? decoded;
   const scoreText =
     detail?.averageScore !== undefined
@@ -162,7 +166,7 @@ export async function AuthorPageView({
   page = 1,
 }: AuthorPageViewProps) {
   const decoded = decodeURIComponent(author);
-  const detail = await getAuthor(decoded, 80);
+  const detail = await getAuthorPageData(decoded);
 
   if (!detail) {
     notFound();

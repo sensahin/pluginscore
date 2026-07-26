@@ -41,6 +41,41 @@ alter table if exists plugins add column if not exists support_threads integer;
 alter table if exists plugins add column if not exists support_threads_resolved integer;
 alter table if exists plugins add column if not exists wporg_added_at timestamptz;
 
+create index if not exists plugins_author_lower_idx
+  on plugins (lower(author))
+  where author is not null and btrim(author) <> '';
+create index if not exists plugins_author_profile_slug_idx
+  on plugins ((
+    case
+      when author_url ~* '^https?://profiles\.wordpress\.org/[^/?#]+/?'
+      then lower(regexp_replace(
+        author_url,
+        '^https?://profiles\.wordpress\.org/([^/?#]+)/?.*$',
+        '\1',
+        'i'
+      ))
+      else null
+    end
+  ))
+  where author_url is not null;
+create index if not exists plugins_author_key_idx
+  on plugins ((
+    coalesce(
+      case
+        when author_url ~* '^https?://profiles\.wordpress\.org/[^/?#]+/?'
+        then lower(regexp_replace(
+          author_url,
+          '^https?://profiles\.wordpress\.org/([^/?#]+)/?.*$',
+          '\1',
+          'i'
+        ))
+        else null
+      end,
+      lower(author)
+    )
+  ))
+  where author is not null and btrim(author) <> '';
+
 create table if not exists plugin_search_events (
   id bigserial primary key,
   plugin_id bigint references plugins(id) on delete cascade,
@@ -197,10 +232,124 @@ create table if not exists external_connection_analyses (
   updated_at timestamptz not null default now()
 );
 
+alter table external_connection_analyses
+  add column if not exists domain_refs_indexed_at timestamptz;
+
 create index if not exists external_connection_analyses_status_idx
   on external_connection_analyses(status, analyzed_at desc);
 create index if not exists external_connection_analyses_analyzed_idx
   on external_connection_analyses(analyzed_at desc);
+
+create table if not exists external_connection_domain_refs (
+  plugin_id bigint not null references plugins(id) on delete cascade,
+  domain text not null,
+  plugin_version text not null,
+  analyzed_at timestamptz not null,
+  reference_count integer not null default 0,
+  outbound_reference_count integer not null default 0,
+  external_asset_reference_count integer not null default 0,
+  reference_types text[] not null default '{}'::text[],
+  confidence_rank smallint not null default 3 check (confidence_rank between 1 and 3),
+  sample_urls jsonb not null default '[]'::jsonb,
+  primary key (plugin_id, domain)
+);
+
+create index if not exists external_connection_domain_refs_domain_idx
+  on external_connection_domain_refs(domain, plugin_id);
+create index if not exists external_connection_domain_refs_domain_seen_idx
+  on external_connection_domain_refs(domain, analyzed_at desc);
+
+with pending_analyses as materialized (
+  select plugin_id, plugin_version, analyzed_at, summary_json
+  from external_connection_analyses
+  where status = 'complete'
+    and domain_refs_indexed_at is null
+),
+finding_rows as materialized (
+  select
+    pending.plugin_id,
+    pending.plugin_version,
+    pending.analyzed_at,
+    regexp_replace(lower(finding_item->>'domain'), '^www\.', '') as domain,
+    finding_item->>'type' as reference_type,
+    case finding_item->>'confidence'
+      when 'high' then 1
+      when 'medium' then 2
+      else 3
+    end as confidence_rank
+  from pending_analyses pending
+  cross join lateral jsonb_array_elements(
+    coalesce(pending.summary_json->'findings', '[]'::jsonb)
+  ) finding_item
+  where finding_item ? 'domain'
+    and coalesce(finding_item->>'domain', '') <> ''
+    and finding_item->>'type' in ('outbound_http', 'external_asset')
+),
+domain_samples as materialized (
+  select distinct on (pending.plugin_id, domain)
+    pending.plugin_id,
+    domain,
+    coalesce(domain_item->'sampleUrls', '[]'::jsonb) as sample_urls
+  from pending_analyses pending
+  cross join lateral jsonb_array_elements(
+    coalesce(pending.summary_json->'domains', '[]'::jsonb)
+  ) domain_item
+  cross join lateral (
+    values (regexp_replace(lower(domain_item->>'domain'), '^www\.', ''))
+  ) normalized(domain)
+  where domain_item ? 'domain'
+  order by pending.plugin_id, domain
+)
+insert into external_connection_domain_refs (
+  plugin_id,
+  domain,
+  plugin_version,
+  analyzed_at,
+  reference_count,
+  outbound_reference_count,
+  external_asset_reference_count,
+  reference_types,
+  confidence_rank,
+  sample_urls
+)
+select
+  findings.plugin_id,
+  findings.domain,
+  findings.plugin_version,
+  findings.analyzed_at,
+  count(*)::integer,
+  count(*) filter (where findings.reference_type = 'outbound_http')::integer,
+  count(*) filter (where findings.reference_type = 'external_asset')::integer,
+  array_agg(distinct findings.reference_type order by findings.reference_type),
+  min(findings.confidence_rank)::smallint,
+  coalesce(samples.sample_urls, '[]'::jsonb)
+from finding_rows findings
+left join domain_samples samples
+  on samples.plugin_id = findings.plugin_id
+ and samples.domain = findings.domain
+where (
+  findings.domain ~ '^[0-9]{1,3}(\.[0-9]{1,3}){3}$'
+  or findings.domain ~ '^[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+\.[a-z]{2,}$'
+)
+group by
+  findings.plugin_id,
+  findings.domain,
+  findings.plugin_version,
+  findings.analyzed_at,
+  samples.sample_urls
+on conflict (plugin_id, domain) do update set
+  plugin_version = excluded.plugin_version,
+  analyzed_at = excluded.analyzed_at,
+  reference_count = excluded.reference_count,
+  outbound_reference_count = excluded.outbound_reference_count,
+  external_asset_reference_count = excluded.external_asset_reference_count,
+  reference_types = excluded.reference_types,
+  confidence_rank = excluded.confidence_rank,
+  sample_urls = excluded.sample_urls;
+
+update external_connection_analyses
+set domain_refs_indexed_at = now()
+where domain_refs_indexed_at is null;
 
 create table if not exists audit_findings (
   id bigserial primary key,

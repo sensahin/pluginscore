@@ -88,7 +88,15 @@ export class PostgresStore implements PluginScoreStore {
   private externalConnectionAnalysisDisabled: boolean;
 
   constructor(databaseUrl: string, options: StoreOptions = {}) {
-    this.pool = new Pool({ connectionString: databaseUrl });
+    this.pool = new Pool({
+      connectionString: databaseUrl,
+      max: 8,
+      connectionTimeoutMillis: 3_000,
+      idleTimeoutMillis: 30_000,
+      statement_timeout: 8_000,
+      query_timeout: 9_000,
+      application_name: "pluginscore-api",
+    });
     this.runningJobTimeoutSeconds = options.runningJobTimeoutSeconds ?? 1800;
     this.runningJobMaxAttempts = options.runningJobMaxAttempts ?? 3;
     this.scanRetryBackoffSeconds = options.scanRetryBackoffSeconds ?? 21_600;
@@ -1367,7 +1375,36 @@ export class PostgresStore implements PluginScoreStore {
 
     const summaryResult = await this.pool.query(
       `
-      with author_plugins as (
+      with author_candidates as (
+        select
+          p.author,
+          p.author_url,
+          ${authorProfileSlugSql("p")} as profile_slug,
+          ${authorKeySql("p")} as author_key,
+          p.slug,
+          p.name,
+          p.active_installs
+        from plugins p
+        where p.author is not null and btrim(p.author) <> ''
+      ),
+      target_author as (
+        select author_key
+        from author_candidates
+        where lower(author) = lower($1)
+          or profile_slug = lower($1)
+          or author_key = lower($1)
+        order by
+          case
+            when profile_slug = lower($1) then 0
+            when lower(author) = lower($1) then 1
+            else 2
+          end,
+          coalesce(active_installs, 0) desc,
+          name asc,
+          slug asc
+        limit 1
+      ),
+      author_plugins as (
         select
           p.author,
           p.author_url,
@@ -1385,43 +1422,29 @@ export class PostgresStore implements PluginScoreStore {
           pcs.warning_count,
           pcs.scanned_at
         from plugins p
+        join target_author on target_author.author_key = ${authorKeySql("p")}
         left join plugin_current_scores pcs on pcs.plugin_id = p.id
-        where p.author is not null and btrim(p.author) <> ''
-      ),
-      target_author as (
-        select author_key
-        from author_plugins
-        where lower(author) = lower($1)
-          or profile_slug = lower($1)
-          or author_key = lower($1)
-        order by
-          case
-            when profile_slug = lower($1) then 0
-            when lower(author) = lower($1) then 1
-            else 2
-          end,
-          coalesce(active_installs, 0) desc,
-          plugin_name asc
-        limit 1
-      ),
-      ranked_author_plugins as (
-        select
-          author_plugins.*,
-          row_number() over (
-            partition by author_plugins.author_key
-            order by coalesce(author_plugins.active_installs, 0) desc, author_plugins.plugin_name asc, author_plugins.plugin_slug asc
-          ) as plugin_rank
-        from author_plugins
-        join target_author on target_author.author_key = author_plugins.author_key
       )
       select
         author_key,
-        (array_agg(author order by plugin_rank))[1] as name,
+        (array_agg(
+          author
+          order by coalesce(active_installs, 0) desc, plugin_name asc, plugin_slug asc
+        ))[1] as name,
         coalesce(
-          (array_agg(profile_slug order by plugin_rank) filter (where profile_slug is not null))[1],
-          (array_agg(author order by plugin_rank))[1]
+          (array_agg(
+            profile_slug
+            order by coalesce(active_installs, 0) desc, plugin_name asc, plugin_slug asc
+          ) filter (where profile_slug is not null))[1],
+          (array_agg(
+            author
+            order by coalesce(active_installs, 0) desc, plugin_name asc, plugin_slug asc
+          ))[1]
         ) as slug,
-        (array_agg(author_url order by plugin_rank) filter (where profile_slug is not null and author_url is not null))[1] as profile_url,
+        (array_agg(
+          author_url
+          order by coalesce(active_installs, 0) desc, plugin_name asc, plugin_slug asc
+        ) filter (where profile_slug is not null and author_url is not null))[1] as profile_url,
         count(*)::integer as plugin_count,
         count(audit_run_id)::integer as audited_plugin_count,
         coalesce(sum(active_installs), 0)::bigint as active_installs,
@@ -1431,10 +1454,19 @@ export class PostgresStore implements PluginScoreStore {
         coalesce(sum(total_findings), 0)::integer as total_findings,
         coalesce(sum(error_count), 0)::integer as total_errors,
         coalesce(sum(warning_count), 0)::integer as total_warnings,
-        max(plugin_slug) filter (where plugin_rank = 1) as top_plugin_slug,
-        max(plugin_name) filter (where plugin_rank = 1) as top_plugin_name,
-        max(active_installs) filter (where plugin_rank = 1) as top_plugin_active_installs
-      from ranked_author_plugins
+        (array_agg(
+          plugin_slug
+          order by coalesce(active_installs, 0) desc, plugin_name asc, plugin_slug asc
+        ))[1] as top_plugin_slug,
+        (array_agg(
+          plugin_name
+          order by coalesce(active_installs, 0) desc, plugin_name asc, plugin_slug asc
+        ))[1] as top_plugin_name,
+        (array_agg(
+          active_installs
+          order by coalesce(active_installs, 0) desc, plugin_name asc, plugin_slug asc
+        ))[1] as top_plugin_active_installs
+      from author_plugins
       group by author_key
       `,
       [normalized],
@@ -1602,36 +1634,18 @@ export class PostgresStore implements PluginScoreStore {
   async listExternalDomains(options: ListExternalDomainsOptions): Promise<ExternalDomainSummary[]> {
     const result = await this.pool.query(
       `
-      with domain_findings as (
-        select
-          regexp_replace(lower(finding_item->>'domain'), '^www\\.', '') as domain,
-          eca.plugin_id,
-          eca.analyzed_at,
-          finding_item->>'type' as type,
-          finding_item->>'confidence' as confidence
-        from external_connection_analyses eca
-        cross join lateral jsonb_array_elements(coalesce(eca.summary_json->'findings', '[]'::jsonb)) finding_item
-        where eca.status = 'complete'
-          and finding_item ? 'domain'
-          and coalesce(finding_item->>'domain', '') <> ''
-          and finding_item->>'type' in ('outbound_http', 'external_asset')
-      ),
-      public_domain_findings as (
-        select *
-        from domain_findings
-        where ${publicExternalDomainSql("domain")}
-      )
       select
         domain,
-        count(distinct plugin_id)::integer as plugin_count,
-        count(*)::integer as total_references,
-        count(*) filter (where type = 'outbound_http')::integer as outbound_references,
-        count(*) filter (where type = 'external_asset')::integer as external_asset_references,
+        count(*)::integer as plugin_count,
+        coalesce(sum(reference_count), 0)::integer as total_references,
+        coalesce(sum(outbound_reference_count), 0)::integer as outbound_references,
+        coalesce(sum(external_asset_reference_count), 0)::integer as external_asset_references,
         max(analyzed_at) as last_seen_at,
-        min(case confidence when 'high' then 1 when 'medium' then 2 else 3 end)::integer as confidence_rank
-      from public_domain_findings
+        min(confidence_rank)::integer as confidence_rank
+      from external_connection_domain_refs
+      where ${publicExternalDomainSql("domain")}
       group by domain
-      having count(distinct plugin_id) >= $2
+      having count(*) >= $2
       order by plugin_count desc, total_references desc, domain asc
       limit $1
       `,
@@ -1650,29 +1664,16 @@ export class PostgresStore implements PluginScoreStore {
 
     const summaryResult = await this.pool.query(
       `
-      with domain_findings as (
-        select
-          regexp_replace(lower(finding_item->>'domain'), '^www\\.', '') as domain,
-          eca.plugin_id,
-          eca.analyzed_at,
-          finding_item->>'type' as type,
-          finding_item->>'confidence' as confidence
-        from external_connection_analyses eca
-        cross join lateral jsonb_array_elements(coalesce(eca.summary_json->'findings', '[]'::jsonb)) finding_item
-        where eca.status = 'complete'
-          and finding_item ? 'domain'
-          and regexp_replace(lower(finding_item->>'domain'), '^www\\.', '') = $1
-          and finding_item->>'type' in ('outbound_http', 'external_asset')
-      )
       select
         domain,
-        count(distinct plugin_id)::integer as plugin_count,
-        count(*)::integer as total_references,
-        count(*) filter (where type = 'outbound_http')::integer as outbound_references,
-        count(*) filter (where type = 'external_asset')::integer as external_asset_references,
+        count(*)::integer as plugin_count,
+        coalesce(sum(reference_count), 0)::integer as total_references,
+        coalesce(sum(outbound_reference_count), 0)::integer as outbound_references,
+        coalesce(sum(external_asset_reference_count), 0)::integer as external_asset_references,
         max(analyzed_at) as last_seen_at,
-        min(case confidence when 'high' then 1 when 'medium' then 2 else 3 end)::integer as confidence_rank
-      from domain_findings
+        min(confidence_rank)::integer as confidence_rank
+      from external_connection_domain_refs
+      where domain = $1
       group by domain
       limit 1
       `,
@@ -1695,48 +1696,20 @@ export class PostgresStore implements PluginScoreStore {
 
     const pluginResult = await this.pool.query(
       `
-      with domain_plugin_refs as (
-        select
-          eca.plugin_id,
-          count(*)::integer as domain_reference_count,
-          count(*) filter (where finding_item->>'type' = 'outbound_http')::integer as domain_outbound_references,
-          count(*) filter (where finding_item->>'type' = 'external_asset')::integer as domain_external_asset_references,
-          array_remove(array_agg(distinct finding_item->>'type'), null) as domain_reference_types,
-          max(eca.plugin_version) as domain_plugin_version,
-          max(eca.analyzed_at) as domain_analyzed_at
-        from external_connection_analyses eca
-        cross join lateral jsonb_array_elements(coalesce(eca.summary_json->'findings', '[]'::jsonb)) finding_item
-        where eca.status = 'complete'
-          and finding_item ? 'domain'
-          and regexp_replace(lower(finding_item->>'domain'), '^www\\.', '') = $1
-          and finding_item->>'type' in ('outbound_http', 'external_asset')
-        group by eca.plugin_id
-      ),
-      domain_samples as (
-        select distinct on (eca.plugin_id)
-          eca.plugin_id,
-          domain_item->'sampleUrls' as domain_sample_urls
-        from external_connection_analyses eca
-        cross join lateral jsonb_array_elements(coalesce(eca.summary_json->'domains', '[]'::jsonb)) domain_item
-        where eca.status = 'complete'
-          and domain_item ? 'domain'
-          and regexp_replace(lower(domain_item->>'domain'), '^www\\.', '') = $1
-        order by eca.plugin_id, eca.analyzed_at desc
-      )
       ${pluginListSelectSql(`
-        dpr.domain_plugin_version,
-        dpr.domain_analyzed_at,
-        dpr.domain_reference_count,
-        dpr.domain_outbound_references,
-        dpr.domain_external_asset_references,
-        dpr.domain_reference_types,
-        coalesce(ds.domain_sample_urls, '[]'::jsonb) as domain_sample_urls
+        dpr.plugin_version as domain_plugin_version,
+        dpr.analyzed_at as domain_analyzed_at,
+        dpr.reference_count as domain_reference_count,
+        dpr.outbound_reference_count as domain_outbound_references,
+        dpr.external_asset_reference_count as domain_external_asset_references,
+        dpr.reference_types as domain_reference_types,
+        dpr.sample_urls as domain_sample_urls
       `)}
-      from domain_plugin_refs dpr
+      from external_connection_domain_refs dpr
       join plugins p on p.id = dpr.plugin_id
       left join plugin_current_scores pcs on pcs.plugin_id = p.id
-      left join domain_samples ds on ds.plugin_id = p.id
       ${pluginTagsSelectSql()}
+      where dpr.domain = $1
       order by coalesce(p.active_installs, 0) desc, p.slug asc
       limit $2
       `,
@@ -2732,6 +2705,7 @@ async function upsertExternalConnectionAnalysis(
       low_confidence_count = excluded.low_confidence_count,
       summary_json = excluded.summary_json,
       analyzed_at = excluded.analyzed_at,
+      domain_refs_indexed_at = null,
       updated_at = now()
     `,
     [
@@ -2755,6 +2729,161 @@ async function upsertExternalConnectionAnalysis(
       analysis.analyzedAt,
     ],
   );
+
+  await replaceExternalConnectionDomainRefs(client, pluginId, analysis);
+}
+
+async function replaceExternalConnectionDomainRefs(
+  client: PoolClient,
+  pluginId: number,
+  analysis: ExternalConnectionAnalysisSummary,
+) {
+  const rows = normalizedExternalDomainRows(analysis);
+
+  await client.query(
+    "delete from external_connection_domain_refs where plugin_id = $1",
+    [pluginId],
+  );
+
+  if (rows.length > 0) {
+    await client.query(
+      `
+      insert into external_connection_domain_refs (
+        plugin_id,
+        domain,
+        plugin_version,
+        analyzed_at,
+        reference_count,
+        outbound_reference_count,
+        external_asset_reference_count,
+        reference_types,
+        confidence_rank,
+        sample_urls
+      )
+      select
+        $1,
+        domain_row.domain,
+        $2,
+        $3::timestamptz,
+        domain_row.reference_count,
+        domain_row.outbound_reference_count,
+        domain_row.external_asset_reference_count,
+        domain_row.reference_types,
+        domain_row.confidence_rank,
+        domain_row.sample_urls
+      from jsonb_to_recordset($4::jsonb) as domain_row(
+        domain text,
+        reference_count integer,
+        outbound_reference_count integer,
+        external_asset_reference_count integer,
+        reference_types text[],
+        confidence_rank smallint,
+        sample_urls jsonb
+      )
+      `,
+      [
+        pluginId,
+        analysis.pluginVersion,
+        analysis.analyzedAt,
+        JSON.stringify(rows),
+      ],
+    );
+  }
+
+  await client.query(
+    `
+    update external_connection_analyses
+    set domain_refs_indexed_at = now()
+    where plugin_id = $1
+    `,
+    [pluginId],
+  );
+}
+
+function normalizedExternalDomainRows(analysis: ExternalConnectionAnalysisSummary) {
+  const sampleUrls = new Map<string, string[]>();
+  const rows = new Map<string, {
+    reference_count: number;
+    outbound_reference_count: number;
+    external_asset_reference_count: number;
+    reference_types: Set<"outbound_http" | "external_asset">;
+    confidence_rank: number;
+  }>();
+
+  for (const domainSummary of analysis.domains) {
+    const domain = normalizeExternalDomain(domainSummary.domain);
+
+    if (!isExternalDomainLikelyPublicHostname(domain)) {
+      continue;
+    }
+
+    sampleUrls.set(
+      domain,
+      [...new Set(domainSummary.sampleUrls.filter(Boolean))].slice(0, 5),
+    );
+  }
+
+  for (const finding of analysis.findings) {
+    if (
+      !finding.domain ||
+      (finding.type !== "outbound_http" && finding.type !== "external_asset")
+    ) {
+      continue;
+    }
+
+    const domain = normalizeExternalDomain(finding.domain);
+
+    if (!isExternalDomainLikelyPublicHostname(domain)) {
+      continue;
+    }
+
+    const row = rows.get(domain) ?? {
+      reference_count: 0,
+      outbound_reference_count: 0,
+      external_asset_reference_count: 0,
+      reference_types: new Set<"outbound_http" | "external_asset">(),
+      confidence_rank: 3,
+    };
+
+    row.reference_count += 1;
+    row.reference_types.add(finding.type);
+    row.confidence_rank = Math.min(
+      row.confidence_rank,
+      externalConnectionConfidenceRank(finding.confidence),
+    );
+
+    if (finding.type === "outbound_http") {
+      row.outbound_reference_count += 1;
+    } else {
+      row.external_asset_reference_count += 1;
+    }
+
+    rows.set(domain, row);
+  }
+
+  return [...rows.entries()].map(([domain, row]) => ({
+    domain,
+    reference_count: row.reference_count,
+    outbound_reference_count: row.outbound_reference_count,
+    external_asset_reference_count: row.external_asset_reference_count,
+    reference_types: [...row.reference_types].sort(),
+    confidence_rank: row.confidence_rank,
+    sample_urls: sampleUrls.get(domain) ?? [],
+  }));
+}
+
+function externalConnectionConfidenceRank(
+  confidence: ExternalConnectionFinding["confidence"],
+) {
+  if (confidence === "high") {
+    return 1;
+  }
+
+  if (confidence === "medium") {
+    return 2;
+  }
+
+  return 3;
 }
 
 async function refreshFindingCodeStats(client: PoolClient, codes: string[]) {

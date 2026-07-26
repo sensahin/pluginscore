@@ -4,7 +4,7 @@ import type {
   ExternalDomainSummary,
   ExternalConnectionType,
 } from "@pluginscore/core";
-import type { ReactNode } from "react";
+import { cache, type ReactNode } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Boxes, ExternalLink, Globe2, Network, PackageSearch } from "lucide-react";
@@ -16,7 +16,10 @@ import { getExternalDomain, getExternalDomains } from "@/lib/api";
 import { seoMetadata } from "@/lib/seo";
 
 const INDEXABLE_DOMAIN_PLUGIN_MINIMUM = 3;
-const DOMAIN_SUMMARY_PREVIEW_LIMIT = 0;
+const DOMAIN_PLUGIN_LIMIT = 100;
+const getDomainPageData = cache((domain: string) =>
+  getExternalDomain(domain, DOMAIN_PLUGIN_LIMIT),
+);
 
 type DomainPageProps = {
   params: Promise<{ domain: string }>;
@@ -37,7 +40,7 @@ export async function generateMetadata({
 }: DomainPageProps): Promise<Metadata> {
   const { domain } = await params;
   const decodedDomain = decodeURIComponent(domain);
-  const detail = await getExternalDomain(decodedDomain, DOMAIN_SUMMARY_PREVIEW_LIMIT);
+  const detail = await getDomainPageData(decodedDomain);
   const displayDomain = detail?.domain ?? decodedDomain;
   const description =
     `WordPress plugins that reference ${displayDomain}, including outbound calls, external assets, and static analysis context from PluginScore.`;
@@ -62,7 +65,7 @@ export async function generateMetadata({
 
 export default async function DomainPage({ params }: DomainPageProps) {
   const { domain } = await params;
-  const detail = await getExternalDomain(decodeURIComponent(domain), 100);
+  const detail = await getDomainPageData(decodeURIComponent(domain));
 
   if (!detail) {
     notFound();
