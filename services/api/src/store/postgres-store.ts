@@ -257,19 +257,14 @@ export class PostgresStore implements PluginScoreStore {
           coalesce((select sum(pg_column_size(stderr))::bigint from audit_runs), 0::bigint) as stderr_bytes
       `),
       this.pool.query(`
-        with per_run as (
-          select audit_run_id, count(*)::integer as finding_count
-          from audit_findings
-          group by audit_run_id
-        )
         select
-          coalesce(sum(finding_count), 0)::bigint as total_finding_rows,
-          avg(finding_count)::numeric as average_findings_per_stored_audit,
-          percentile_cont(0.5) within group (order by finding_count)::numeric as p50_findings_per_stored_audit,
-          percentile_cont(0.9) within group (order by finding_count)::numeric as p90_findings_per_stored_audit,
-          percentile_cont(0.99) within group (order by finding_count)::numeric as p99_findings_per_stored_audit,
-          max(finding_count)::integer as max_findings_per_stored_audit
-        from per_run
+          coalesce(sum(total_findings), 0)::bigint as total_finding_rows,
+          avg(total_findings)::numeric as average_findings_per_stored_audit,
+          percentile_cont(0.5) within group (order by total_findings)::numeric as p50_findings_per_stored_audit,
+          percentile_cont(0.9) within group (order by total_findings)::numeric as p90_findings_per_stored_audit,
+          percentile_cont(0.99) within group (order by total_findings)::numeric as p99_findings_per_stored_audit,
+          max(total_findings)::integer as max_findings_per_stored_audit
+        from plugin_current_scores
       `),
       this.pool.query(`
         select plugin_check_version as version, count(*)::integer as count
@@ -1725,6 +1720,21 @@ export class PostgresStore implements PluginScoreStore {
   async listQueue(options: ListQueueOptions): Promise<QueueJob[]> {
     const result = await this.pool.query(
       `
+      with selected_jobs as materialized (
+        select sj.*
+        from scan_jobs sj
+        order by
+          case sj.status
+            when 'running' then 0
+            when 'queued' then 1
+            when 'failed' then 2
+            when 'complete' then 3
+            else 4
+          end,
+          sj.updated_at desc,
+          sj.id desc
+        limit $1
+      )
       select
         p.slug as plugin,
         sj.target_version as version,
@@ -1735,7 +1745,7 @@ export class PostgresStore implements PluginScoreStore {
           when sj.status = 'running' then extract(epoch from (now() - sj.updated_at)) * 1000
           else coalesce(ar.duration_ms::double precision, extract(epoch from (sj.updated_at - sj.created_at)) * 1000)
         end as runtime_ms
-      from scan_jobs sj
+      from selected_jobs sj
       join plugins p on p.id = sj.plugin_id
       left join lateral (
         select duration_ms
@@ -1755,7 +1765,6 @@ export class PostgresStore implements PluginScoreStore {
         end,
         sj.updated_at desc,
         sj.id desc
-      limit $1
       `,
       [options.limit],
     );

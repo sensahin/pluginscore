@@ -406,6 +406,9 @@ create index if not exists audit_runs_plugin_version_complete_idx
 create index if not exists audit_runs_plugin_version_failure_idx
   on audit_runs(plugin_id, plugin_version, plugin_check_version, scoring_model_version, status, completed_at desc)
   where status in ('failed', 'timeout');
+create index if not exists audit_runs_plugin_version_latest_idx
+  on audit_runs(plugin_id, plugin_version, completed_at desc nulls last, id desc)
+  include (duration_ms);
 
 create table if not exists score_snapshots (
   id bigserial primary key,

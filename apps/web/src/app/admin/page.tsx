@@ -54,24 +54,27 @@ const adminViews: Array<{ id: AdminView; label: string }> = [
 export default async function AdminPage({ searchParams }: AdminPageProps) {
   const { view } = await searchParams;
   const activeView = parseAdminView(view);
+  const needsOperations = activeView !== "external";
   const [health, stats, queueJobs, retention, operations, reportStats, externalConnections] = await Promise.all([
-    getHealth(),
-    getFreshStats(),
-    getQueue(20),
-    getAuditFindingsRetention(),
-    getOperationsSummary(),
+    activeView === "system" ? getHealth() : Promise.resolve(null),
+    activeView === "overview" ? getFreshStats() : Promise.resolve(null),
+    activeView === "queue" ? getQueue(20) : Promise.resolve([]),
+    activeView === "system" ? getAuditFindingsRetention() : Promise.resolve(null),
+    needsOperations ? getOperationsSummary() : Promise.resolve(null),
     getPluginReportStats(),
-    getExternalConnectionOperations(),
+    activeView === "external" ? getExternalConnectionOperations() : Promise.resolve(null),
   ]);
-  const metrics = [
-    { label: "Indexed plugins", value: stats.indexedPlugins.toLocaleString(), detail: "metadata rows" },
-    { label: "Audited plugins", value: (stats.auditedPlugins ?? stats.completedScans).toLocaleString(), detail: "unique plugins" },
-    { label: "Completed audits", value: stats.completedScans.toLocaleString(), detail: "stored scan history" },
-    { label: "Queued jobs", value: stats.queuedJobs.toLocaleString(), detail: "waiting to scan" },
-    { label: "Running scans", value: stats.runningJobs.toLocaleString(), detail: "active workers" },
-    { label: "Failed jobs", value: stats.failedJobs.toLocaleString(), detail: "needs operator check" },
-    { label: "Open issue codes", value: stats.issueCodes.toLocaleString(), detail: "deduped taxonomy" },
-  ];
+  const metrics = stats
+    ? [
+        { label: "Indexed plugins", value: stats.indexedPlugins.toLocaleString(), detail: "metadata rows" },
+        { label: "Audited plugins", value: (stats.auditedPlugins ?? stats.completedScans).toLocaleString(), detail: "unique plugins" },
+        { label: "Completed audits", value: stats.completedScans.toLocaleString(), detail: "stored scan history" },
+        { label: "Queued jobs", value: stats.queuedJobs.toLocaleString(), detail: "waiting to scan" },
+        { label: "Running scans", value: stats.runningJobs.toLocaleString(), detail: "active workers" },
+        { label: "Failed jobs", value: stats.failedJobs.toLocaleString(), detail: "needs operator check" },
+        { label: "Open issue codes", value: stats.issueCodes.toLocaleString(), detail: "deduped taxonomy" },
+      ]
+    : [];
   const operationsMetrics = operations
     ? [
         {
@@ -394,9 +397,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
               <Activity size={18} className="text-muted" aria-hidden="true" />
             </div>
             <div className="mt-4 divide-y divide-line text-sm">
-              <Meta label="API URL" value={health.apiUrl ?? "sample data"} />
-              <Meta label="Status" value={health.ok ? "ok" : "fallback"} />
-              <Meta label="Mode" value={health.mode ?? "sample"} />
+              <Meta label="API URL" value={health?.apiUrl ?? "sample data"} />
+              <Meta label="Status" value={health?.ok ? "ok" : "fallback"} />
+              <Meta label="Mode" value={health?.mode ?? "sample"} />
             </div>
           </section>
 
