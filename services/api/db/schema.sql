@@ -7,6 +7,33 @@ create table if not exists plugins (
   banner_url text,
   author text,
   author_url text,
+  author_profile_slug text generated always as (
+    case
+      when author_url ~* '^https?://profiles\.wordpress\.org/[^/?#]+/?'
+      then lower(regexp_replace(
+        author_url,
+        '^https?://profiles\.wordpress\.org/([^/?#]+)/?.*$',
+        '\1',
+        'i'
+      ))
+      else null
+    end
+  ) stored,
+  author_key text generated always as (
+    coalesce(
+      case
+        when author_url ~* '^https?://profiles\.wordpress\.org/[^/?#]+/?'
+        then lower(regexp_replace(
+          author_url,
+          '^https?://profiles\.wordpress\.org/([^/?#]+)/?.*$',
+          '\1',
+          'i'
+        ))
+        else null
+      end,
+      lower(author)
+    )
+  ) stored,
   homepage_url text,
   requires_wp text,
   tested_wp text,
@@ -31,21 +58,8 @@ alter table if exists plugins add column if not exists icon_url text;
 alter table if exists plugins add column if not exists banner_url text;
 alter table if exists plugins add column if not exists author text;
 alter table if exists plugins add column if not exists author_url text;
-alter table if exists plugins add column if not exists homepage_url text;
-alter table if exists plugins add column if not exists requires_wp text;
-alter table if exists plugins add column if not exists tested_wp text;
-alter table if exists plugins add column if not exists requires_php text;
-alter table if exists plugins add column if not exists rating integer;
-alter table if exists plugins add column if not exists rating_count integer;
-alter table if exists plugins add column if not exists support_threads integer;
-alter table if exists plugins add column if not exists support_threads_resolved integer;
-alter table if exists plugins add column if not exists wporg_added_at timestamptz;
-
-create index if not exists plugins_author_lower_idx
-  on plugins (lower(author))
-  where author is not null and btrim(author) <> '';
-create index if not exists plugins_author_profile_slug_idx
-  on plugins ((
+alter table if exists plugins add column if not exists author_profile_slug text
+  generated always as (
     case
       when author_url ~* '^https?://profiles\.wordpress\.org/[^/?#]+/?'
       then lower(regexp_replace(
@@ -56,10 +70,9 @@ create index if not exists plugins_author_profile_slug_idx
       ))
       else null
     end
-  ))
-  where author_url is not null;
-create index if not exists plugins_author_key_idx
-  on plugins ((
+  ) stored;
+alter table if exists plugins add column if not exists author_key text
+  generated always as (
     coalesce(
       case
         when author_url ~* '^https?://profiles\.wordpress\.org/[^/?#]+/?'
@@ -73,8 +86,28 @@ create index if not exists plugins_author_key_idx
       end,
       lower(author)
     )
-  ))
+  ) stored;
+alter table if exists plugins add column if not exists homepage_url text;
+alter table if exists plugins add column if not exists requires_wp text;
+alter table if exists plugins add column if not exists tested_wp text;
+alter table if exists plugins add column if not exists requires_php text;
+alter table if exists plugins add column if not exists rating integer;
+alter table if exists plugins add column if not exists rating_count integer;
+alter table if exists plugins add column if not exists support_threads integer;
+alter table if exists plugins add column if not exists support_threads_resolved integer;
+alter table if exists plugins add column if not exists wporg_added_at timestamptz;
+
+create index if not exists plugins_author_lower_idx
+  on plugins (lower(author))
   where author is not null and btrim(author) <> '';
+drop index if exists plugins_author_profile_slug_idx;
+drop index if exists plugins_author_key_idx;
+create index if not exists plugins_author_profile_slug_column_idx
+  on plugins (author_profile_slug)
+  where author_profile_slug is not null;
+create index if not exists plugins_author_key_column_idx
+  on plugins (author_key)
+  where author_key is not null;
 
 create table if not exists plugin_search_events (
   id bigserial primary key,

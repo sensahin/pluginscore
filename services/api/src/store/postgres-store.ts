@@ -3151,17 +3151,11 @@ function publicExternalDomainSql(domainExpression: string) {
 }
 
 function authorProfileSlugSql(alias: string) {
-  return `
-      case
-        when ${alias}.author_url ~* '^https?://profiles\\.wordpress\\.org/[^/?#]+/?'
-        then lower(regexp_replace(${alias}.author_url, '^https?://profiles\\.wordpress\\.org/([^/?#]+)/?.*$', '\\1', 'i'))
-        else null
-      end
-  `;
+  return `${alias}.author_profile_slug`;
 }
 
 function authorKeySql(alias: string) {
-  return `coalesce(${authorProfileSlugSql(alias)}, lower(${alias}.author))`;
+  return `${alias}.author_key`;
 }
 
 function authorSummarySortSql(sort: ListAuthorsOptions["sort"]) {
