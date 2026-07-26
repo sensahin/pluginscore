@@ -128,15 +128,20 @@ export class PostgresStore implements PluginScoreStore {
         (
           select count(*)::integer
           from (
-            select distinct on (plugin_id, target_version) status
-            from scan_jobs
-            order by plugin_id, target_version, updated_at desc, id desc
+            select distinct on (sj.plugin_id, sj.target_version)
+              sj.plugin_id,
+              sj.status
+            from scan_jobs sj
+            order by sj.plugin_id, sj.target_version, sj.updated_at desc, sj.id desc
           ) latest_jobs
-          where status = 'failed'
+          join plugins p on p.id = latest_jobs.plugin_id
+          where latest_jobs.status = 'failed'
+            and not (p.slug = any($1::text[]))
         ) as failed_jobs,
         (select count(*)::integer from finding_codes) as issue_codes,
         (select count(*)::integer from plugin_search_events) as recent_searches
       `,
+      [[...this.ignoredPluginSlugs]],
     );
 
     return rowToApiStats(result.rows[0] ?? {});
@@ -206,11 +211,15 @@ export class PostgresStore implements PluginScoreStore {
           (
             select count(*)::integer
             from (
-              select distinct on (plugin_id, target_version) status
-              from scan_jobs
-              order by plugin_id, target_version, updated_at desc, id desc
+              select distinct on (sj.plugin_id, sj.target_version)
+                sj.plugin_id,
+                sj.status
+              from scan_jobs sj
+              order by sj.plugin_id, sj.target_version, sj.updated_at desc, sj.id desc
             ) latest_jobs
-            where status = 'failed'
+            join plugins failed_plugin on failed_plugin.id = latest_jobs.plugin_id
+            where latest_jobs.status = 'failed'
+              and not (failed_plugin.slug = any($1::text[]))
           ) as failed_jobs,
           (
             select count(*)::integer
@@ -220,7 +229,7 @@ export class PostgresStore implements PluginScoreStore {
           ) as user_submitted_queued_jobs
         from plugins p
         left join plugin_current_scores pcs on pcs.plugin_id = p.id
-      `),
+      `, [[...this.ignoredPluginSlugs]]),
       this.pool.query(
         `
         with recent_complete as (
@@ -312,8 +321,10 @@ export class PostgresStore implements PluginScoreStore {
             plugin_check_version,
             scoring_model_version,
             count(*)::integer as timeout_count
-          from audit_runs
-          where status = 'timeout'
+          from audit_runs ar
+          join plugins p on p.id = ar.plugin_id
+          where ar.status = 'timeout'
+            and not (p.slug = any($3::text[]))
           group by
             plugin_id,
             plugin_version,
@@ -328,8 +339,10 @@ export class PostgresStore implements PluginScoreStore {
             scoring_model_version,
             md5(coalesce(stderr, '')) as failure_signature,
             count(*)::integer as failure_count
-          from audit_runs
-          where status = 'failed'
+          from audit_runs ar
+          join plugins p on p.id = ar.plugin_id
+          where ar.status = 'failed'
+            and not (p.slug = any($3::text[]))
           group by
             plugin_id,
             plugin_version,
@@ -343,7 +356,11 @@ export class PostgresStore implements PluginScoreStore {
           (select count(*)::integer from timeout_groups where timeout_count >= $1) as repeated_timeout_plugins,
           (select count(*)::integer from failure_groups where failure_count >= $2) as repeated_failure_plugins
         `,
-        [this.scanTerminalTimeoutAttempts, this.scanTerminalFailureAttempts],
+        [
+          this.scanTerminalTimeoutAttempts,
+          this.scanTerminalFailureAttempts,
+          [...this.ignoredPluginSlugs],
+        ],
       ),
       this.pool.query(`
         with latest_jobs as materialized (
@@ -374,9 +391,10 @@ export class PostgresStore implements PluginScoreStore {
           limit 1
         ) audit on true
         where sj.status = 'failed'
+          and not (p.slug = any($1::text[]))
         order by sj.updated_at desc, sj.id desc
         limit 8
-      `),
+      `, [[...this.ignoredPluginSlugs]]),
       this.pool.query(`
         select
           p.slug as plugin,
@@ -1771,6 +1789,8 @@ export class PostgresStore implements PluginScoreStore {
             order by sj.updated_at desc, sj.id desc
           ) as job_rank
         from scan_jobs sj
+        join plugins queued_plugin on queued_plugin.id = sj.plugin_id
+        where not (queued_plugin.slug = any($2::text[]))
       ),
       selected_jobs as materialized (
         select sj.*
@@ -1820,7 +1840,7 @@ export class PostgresStore implements PluginScoreStore {
         sj.updated_at desc,
         sj.id desc
       `,
-      [options.limit],
+      [options.limit, [...this.ignoredPluginSlugs]],
     );
 
     return result.rows.map(rowToQueueJob);
@@ -2112,8 +2132,10 @@ export class PostgresStore implements PluginScoreStore {
         with next_job as (
           select sj.id
           from scan_jobs sj
+          join plugins queued_plugin on queued_plugin.id = sj.plugin_id
           where sj.status = 'queued'
             and sj.run_after <= now()
+            and not (queued_plugin.slug = any($1::text[]))
           order by sj.priority asc, sj.run_after asc, sj.id asc
           limit 1
           for update skip locked
@@ -2133,6 +2155,7 @@ export class PostgresStore implements PluginScoreStore {
           p.download_url as "downloadUrl",
           sj.attempts
         `,
+        [[...this.ignoredPluginSlugs]],
       );
 
       const job = result.rows[0] ?? null;
