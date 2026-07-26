@@ -402,6 +402,7 @@ export type OperationsSummary = {
     scanRetryBackoffSeconds: number;
     scanTerminalTimeoutAttempts: number;
     scanTerminalFailureAttempts: number;
+    ignoredPluginSlugs: string[];
   };
   failures: {
     failedAuditRuns: number;

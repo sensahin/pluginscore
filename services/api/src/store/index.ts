@@ -8,6 +8,7 @@ export type StoreOptions = {
   scanRetryBackoffSeconds?: number;
   scanTerminalTimeoutAttempts?: number;
   scanTerminalFailureAttempts?: number;
+  ignoredPluginSlugs?: string[];
   pluginCheckVersion?: string;
   externalConnectionAnalysisDisabled?: boolean;
 };
@@ -17,5 +18,5 @@ export function createStore(databaseUrl?: string, options: StoreOptions = {}): P
     return new PostgresStore(databaseUrl, options);
   }
 
-  return new MemoryStore();
+  return new MemoryStore(options.ignoredPluginSlugs);
 }

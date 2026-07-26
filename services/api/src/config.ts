@@ -17,6 +17,7 @@ export type ApiConfig = {
   scanRetryBackoffSeconds: number;
   scanTerminalTimeoutAttempts: number;
   scanTerminalFailureAttempts: number;
+  ignoredPluginSlugs: string[];
   pluginCheckVersion: string;
   externalConnectionAnalysisDisabled: boolean;
 };
@@ -42,9 +43,19 @@ export function getConfig(): ApiConfig {
     scanRetryBackoffSeconds: Number.parseInt(process.env.SCAN_RETRY_BACKOFF_SECONDS ?? "21600", 10),
     scanTerminalTimeoutAttempts: Number.parseInt(process.env.SCAN_TERMINAL_TIMEOUT_ATTEMPTS ?? "2", 10),
     scanTerminalFailureAttempts: Number.parseInt(process.env.SCAN_TERMINAL_FAILURE_ATTEMPTS ?? "3", 10),
+    ignoredPluginSlugs: parsePluginSlugList(process.env.SCAN_IGNORED_PLUGIN_SLUGS),
     pluginCheckVersion: process.env.PLUGIN_CHECK_VERSION ?? "unknown",
     externalConnectionAnalysisDisabled: process.env.EXTERNAL_CONNECTION_ANALYSIS_DISABLED === "true",
   };
+}
+
+function parsePluginSlugList(value?: string) {
+  return [...new Set(
+    (value ?? "")
+      .split(",")
+      .map((slug) => slug.trim().toLowerCase())
+      .filter((slug) => /^[a-z0-9-]+$/.test(slug)),
+  )];
 }
 
 function parseCorsOrigin(value?: string) {

@@ -438,6 +438,12 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
                   <Meta label="Terminal failures" value={operations.retryPolicy.scanTerminalFailureAttempts.toLocaleString()} />
                   <Meta label="Suppressed timeout groups" value={operations.failures.repeatedTimeoutPlugins.toLocaleString()} />
                   <Meta label="Suppressed failure groups" value={operations.failures.repeatedFailurePlugins.toLocaleString()} />
+                  <Meta
+                    label="Excluded plugins"
+                    value={operations.retryPolicy.ignoredPluginSlugs.length > 0
+                      ? operations.retryPolicy.ignoredPluginSlugs.join(", ")
+                      : "None"}
+                  />
                 </div>
               </section>
 

@@ -9,6 +9,7 @@ const store = createStore(config.databaseUrl, {
   scanRetryBackoffSeconds: config.scanRetryBackoffSeconds,
   scanTerminalTimeoutAttempts: config.scanTerminalTimeoutAttempts,
   scanTerminalFailureAttempts: config.scanTerminalFailureAttempts,
+  ignoredPluginSlugs: config.ignoredPluginSlugs,
   pluginCheckVersion: config.pluginCheckVersion,
   externalConnectionAnalysisDisabled: config.externalConnectionAnalysisDisabled,
 });

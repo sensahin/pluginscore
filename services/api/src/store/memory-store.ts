@@ -69,6 +69,7 @@ type SamplePlugin = (typeof plugins)[number];
 
 export class MemoryStore implements PluginScoreStore {
   private jobs: MemoryJob[] = [];
+  private ignoredPluginSlugs: Set<string>;
   private completedAudits: CompletedAudit[] = [];
   private searchEvents: SearchEvent[] = [];
   private comparisonStats = new Map<string, ComparisonStat>();
@@ -81,6 +82,12 @@ export class MemoryStore implements PluginScoreStore {
   };
   private nextJobId = 1;
   private nextReportId = 1;
+
+  constructor(ignoredPluginSlugs: string[] = []) {
+    this.ignoredPluginSlugs = new Set(
+      ignoredPluginSlugs.map((slug) => slug.trim().toLowerCase()).filter(Boolean),
+    );
+  }
 
   async health() {
     return { ok: true as const, mode: "memory" as const };
@@ -177,6 +184,7 @@ export class MemoryStore implements PluginScoreStore {
         scanRetryBackoffSeconds: 0,
         scanTerminalTimeoutAttempts: 0,
         scanTerminalFailureAttempts: 0,
+        ignoredPluginSlugs: [...this.ignoredPluginSlugs].sort(),
       },
       failures: {
         failedAuditRuns: 0,
@@ -666,6 +674,10 @@ export class MemoryStore implements PluginScoreStore {
   }
 
   async enqueueJob(input: EnqueueJobInput) {
+    if (this.ignoredPluginSlugs.has(input.slug.trim().toLowerCase())) {
+      return { id: 0, queued: false };
+    }
+
     const existing = this.jobs.find(
       (job) =>
         job.slug === input.slug &&

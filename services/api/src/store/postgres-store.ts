@@ -85,6 +85,7 @@ export class PostgresStore implements PluginScoreStore {
   private scanRetryBackoffSeconds: number;
   private scanTerminalTimeoutAttempts: number;
   private scanTerminalFailureAttempts: number;
+  private ignoredPluginSlugs: Set<string>;
   private pluginCheckVersion: string;
   private externalConnectionAnalysisDisabled: boolean;
 
@@ -103,6 +104,9 @@ export class PostgresStore implements PluginScoreStore {
     this.scanRetryBackoffSeconds = options.scanRetryBackoffSeconds ?? 21_600;
     this.scanTerminalTimeoutAttempts = options.scanTerminalTimeoutAttempts ?? 2;
     this.scanTerminalFailureAttempts = options.scanTerminalFailureAttempts ?? 3;
+    this.ignoredPluginSlugs = new Set(
+      (options.ignoredPluginSlugs ?? []).map((slug) => slug.trim().toLowerCase()).filter(Boolean),
+    );
     this.pluginCheckVersion = options.pluginCheckVersion ?? "unknown";
     this.externalConnectionAnalysisDisabled = options.externalConnectionAnalysisDisabled ?? false;
   }
@@ -507,6 +511,7 @@ export class PostgresStore implements PluginScoreStore {
         scanRetryBackoffSeconds: this.scanRetryBackoffSeconds,
         scanTerminalTimeoutAttempts: this.scanTerminalTimeoutAttempts,
         scanTerminalFailureAttempts: this.scanTerminalFailureAttempts,
+        ignoredPluginSlugs: [...this.ignoredPluginSlugs].sort(),
       },
       failures: {
         failedAuditRuns: Number(failureResult.rows[0]?.failed_audit_runs ?? 0),
@@ -1948,6 +1953,10 @@ export class PostgresStore implements PluginScoreStore {
       }
 
       await replacePluginTags(client, pluginId, input.tags ?? []);
+
+      if (this.ignoredPluginSlugs.has(input.slug.trim().toLowerCase())) {
+        return { id: 0, queued: false };
+      }
 
       const existing = await client.query<{ id: number }>(
         `
