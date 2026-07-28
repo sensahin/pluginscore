@@ -171,6 +171,7 @@ export class MemoryStore implements PluginScoreStore {
         rawReportJsonBytes: 0,
         stderrBytes: 0,
         totalFindingRows: 0,
+        history: [],
       },
       versions: {
         apiPluginCheckVersion: "sample",
@@ -204,6 +205,10 @@ export class MemoryStore implements PluginScoreStore {
       },
       recentCompleted: [],
     };
+  }
+
+  async captureStorageSnapshot() {
+    return;
   }
 
   async externalConnectionOperations(): Promise<ExternalConnectionOperations> {

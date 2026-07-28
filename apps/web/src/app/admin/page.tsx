@@ -15,6 +15,7 @@ import {
 import Link from "next/link";
 import { AdminExternalConnectionSettingsForm } from "@/components/admin-external-connection-settings-form";
 import { AppShell } from "@/components/app-shell";
+import { StorageGrowthTable } from "@/components/storage-growth-table";
 import {
   getAuditFindingsRetention,
   getExternalConnectionOperations,
@@ -462,17 +463,15 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
 
               <section className="rounded-md border border-line bg-surface p-5">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-base font-semibold">Storage</h2>
+                  <div>
+                    <h2 className="text-base font-semibold">Storage Growth</h2>
+                    <p className="mt-1 text-sm text-muted">
+                      Database size, scan storage, and finding-volume history
+                    </p>
+                  </div>
                   <HardDrive size={18} className="text-muted" aria-hidden="true" />
                 </div>
-                <div className="mt-4 divide-y divide-line text-sm">
-                  <Meta label="Database" value={formatBytes(operations.storage.databaseBytes)} />
-                  <Meta label="Findings table" value={formatBytes(operations.storage.auditFindingsBytes)} />
-                  <Meta label="Audit runs" value={formatBytes(operations.storage.auditRunsBytes)} />
-                  <Meta label="Raw reports" value={formatBytes(operations.storage.rawReportJsonBytes)} />
-                  <Meta label="Finding rows" value={operations.storage.totalFindingRows.toLocaleString()} />
-                  <Meta label="p90 findings/audit" value={formatOptionalNumber(operations.storage.p90FindingsPerStoredAudit)} />
-                </div>
+                <StorageGrowthTable storage={operations.storage} />
               </section>
             </>
           ) : null}

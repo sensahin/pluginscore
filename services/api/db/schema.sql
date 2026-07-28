@@ -650,3 +650,17 @@ create table if not exists scan_jobs (
 );
 
 create index if not exists scan_jobs_queue_idx on scan_jobs(status, priority asc, run_after asc);
+
+create table if not exists database_storage_snapshots (
+  snapshot_hour timestamptz primary key,
+  captured_at timestamptz not null default now(),
+  database_bytes bigint not null,
+  audit_findings_bytes bigint not null,
+  audit_runs_bytes bigint not null,
+  raw_report_json_bytes bigint not null,
+  total_finding_rows bigint not null,
+  p90_findings_per_stored_audit integer not null
+);
+
+create index if not exists database_storage_snapshots_captured_at_idx
+  on database_storage_snapshots(captured_at desc);

@@ -156,6 +156,7 @@ export interface PluginScoreStore {
   stats(): Promise<ApiStats>;
   auditFindingsRetention(): Promise<AuditFindingsRetentionSummary>;
   operationsSummary(): Promise<OperationsSummary>;
+  captureStorageSnapshot(): Promise<void>;
   externalConnectionOperations(): Promise<ExternalConnectionOperations>;
   updateExternalConnectionSettings(input: ExternalConnectionSettingsInput): Promise<ExternalConnectionOperations>;
   listPlugins(options: ListPluginsOptions): Promise<PaginatedResult<PluginSummary>>;

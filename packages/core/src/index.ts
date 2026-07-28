@@ -28,6 +28,7 @@ export type {
   OperationsRecentFailure,
   OperationsRecentScan,
   OperationsRunningJob,
+  OperationsStorageSnapshot,
   OperationsSummary,
   OperationsUserSubmission,
   OperationsVersionCount,

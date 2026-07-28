@@ -14,6 +14,16 @@ const store = createStore(config.databaseUrl, {
   externalConnectionAnalysisDisabled: config.externalConnectionAnalysisDisabled,
 });
 const server = await createServer(config, store);
+const storageSnapshotInterval = setInterval(() => {
+  void store.captureStorageSnapshot().catch((error: unknown) => {
+    server.log.warn({ error }, "Unable to capture database storage snapshot");
+  });
+}, 60 * 60 * 1000);
+storageSnapshotInterval.unref();
+
+server.addHook("onClose", async () => {
+  clearInterval(storageSnapshotInterval);
+});
 
 try {
   await server.listen({ host: config.host, port: config.port });
@@ -21,3 +31,7 @@ try {
   server.log.error(error);
   process.exit(1);
 }
+
+void store.captureStorageSnapshot().catch((error: unknown) => {
+  server.log.warn({ error }, "Unable to capture initial database storage snapshot");
+});

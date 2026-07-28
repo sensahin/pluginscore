@@ -24,6 +24,7 @@ import type {
   OperationsRecentFailure,
   OperationsRecentScan,
   OperationsRunningJob,
+  OperationsStorageSnapshot,
   OperationsSummary,
   OperationsUserSubmission,
   OperationsVersionCount,
@@ -464,6 +465,32 @@ export class PostgresStore implements PluginScoreStore {
     const storageRow = storageResult.rows[0] ?? {};
     const distributionRow = distributionResult.rows[0] ?? {};
     const userSubmissionStatsRow = userSubmissionStatsResult.rows[0] ?? {};
+    const currentStorageSnapshot: Omit<OperationsStorageSnapshot, "capturedAt"> = {
+      databaseBytes: Number(storageRow.database_bytes ?? 0),
+      auditFindingsBytes: Number(storageRow.audit_findings_bytes ?? 0),
+      auditRunsBytes: Number(storageRow.audit_runs_bytes ?? 0),
+      rawReportJsonBytes: Number(storageRow.raw_report_json_bytes ?? 0),
+      totalFindingRows: Number(distributionRow.total_finding_rows ?? 0),
+      p90FindingsPerStoredAudit: optionalRoundedNumber(
+        distributionRow.p90_findings_per_stored_audit,
+      ) ?? 0,
+    };
+    await upsertDatabaseStorageSnapshot(this.pool, currentStorageSnapshot);
+    const storageHistoryResult = await this.pool.query(
+      `
+      select
+        captured_at,
+        database_bytes,
+        audit_findings_bytes,
+        audit_runs_bytes,
+        raw_report_json_bytes,
+        total_finding_rows,
+        p90_findings_per_stored_audit
+      from database_storage_snapshots
+      where captured_at >= now() - interval '31 days'
+      order by captured_at asc
+      `,
+    );
     const indexedPlugins = Number(coverageRow.indexed_plugins ?? 0);
     const auditedPlugins = Number(coverageRow.audited_plugins ?? 0);
     const queuedJobs = Number(coverageRow.queued_jobs ?? 0);
@@ -516,6 +543,7 @@ export class PostgresStore implements PluginScoreStore {
         p90FindingsPerStoredAudit: optionalRoundedNumber(distributionRow.p90_findings_per_stored_audit),
         p99FindingsPerStoredAudit: optionalRoundedNumber(distributionRow.p99_findings_per_stored_audit),
         maxFindingsPerStoredAudit: optionalRoundedNumber(distributionRow.max_findings_per_stored_audit),
+        history: storageHistoryResult.rows.map(rowToOperationsStorageSnapshot),
       },
       versions: {
         apiPluginCheckVersion: this.pluginCheckVersion,
@@ -550,6 +578,10 @@ export class PostgresStore implements PluginScoreStore {
       },
       recentCompleted: recentCompletedResult.rows.map(rowToOperationsRecentScan),
     };
+  }
+
+  async captureStorageSnapshot() {
+    await captureDatabaseStorageSnapshot(this.pool);
   }
 
   async externalConnectionOperations(): Promise<ExternalConnectionOperations> {
@@ -2397,6 +2429,12 @@ export class PostgresStore implements PluginScoreStore {
         [id],
       );
     });
+
+    try {
+      await this.captureStorageSnapshot();
+    } catch {
+      // Storage monitoring must never turn a completed audit into a failed job.
+    }
   }
 
   async failJob(id: number, payload: ScanFailPayload) {
@@ -2637,6 +2675,110 @@ async function withTransaction<T>(pool: Pool, callback: (client: PoolClient) => 
   } finally {
     client.release();
   }
+}
+
+async function captureDatabaseStorageSnapshot(pool: Pool) {
+  const existingResult = await pool.query(
+    `
+    select 1
+    from database_storage_snapshots
+    where snapshot_hour = date_trunc('hour', now())
+    limit 1
+    `,
+  );
+
+  if (existingResult.rowCount) {
+    return;
+  }
+
+  const result = await pool.query(
+    `
+    select
+      pg_database_size(current_database())::bigint as database_bytes,
+      pg_total_relation_size('audit_findings'::regclass)::bigint as audit_findings_bytes,
+      pg_total_relation_size('audit_runs'::regclass)::bigint as audit_runs_bytes,
+      coalesce(
+        (select sum(pg_column_size(raw_report_json))::bigint from audit_runs),
+        0::bigint
+      ) as raw_report_json_bytes,
+      coalesce(
+        (select sum(total_findings)::bigint from plugin_current_scores),
+        0::bigint
+      ) as total_finding_rows,
+      coalesce(
+        (
+          select round(
+            percentile_cont(0.9) within group (order by total_findings)
+          )::integer
+          from plugin_current_scores
+        ),
+        0
+      ) as p90_findings_per_stored_audit
+    `,
+  );
+  const row = result.rows[0] ?? {};
+
+  await upsertDatabaseStorageSnapshot(pool, {
+    databaseBytes: Number(row.database_bytes ?? 0),
+    auditFindingsBytes: Number(row.audit_findings_bytes ?? 0),
+    auditRunsBytes: Number(row.audit_runs_bytes ?? 0),
+    rawReportJsonBytes: Number(row.raw_report_json_bytes ?? 0),
+    totalFindingRows: Number(row.total_finding_rows ?? 0),
+    p90FindingsPerStoredAudit: Number(row.p90_findings_per_stored_audit ?? 0),
+  });
+}
+
+async function upsertDatabaseStorageSnapshot(
+  pool: Pool,
+  snapshot: Omit<OperationsStorageSnapshot, "capturedAt">,
+) {
+  await pool.query(
+    `
+    insert into database_storage_snapshots (
+      snapshot_hour,
+      captured_at,
+      database_bytes,
+      audit_findings_bytes,
+      audit_runs_bytes,
+      raw_report_json_bytes,
+      total_finding_rows,
+      p90_findings_per_stored_audit
+    )
+    values (
+      date_trunc('hour', now()),
+      now(),
+      $1,
+      $2,
+      $3,
+      $4,
+      $5,
+      $6
+    )
+    on conflict (snapshot_hour) do update set
+      captured_at = excluded.captured_at,
+      database_bytes = excluded.database_bytes,
+      audit_findings_bytes = excluded.audit_findings_bytes,
+      audit_runs_bytes = excluded.audit_runs_bytes,
+      raw_report_json_bytes = excluded.raw_report_json_bytes,
+      total_finding_rows = excluded.total_finding_rows,
+      p90_findings_per_stored_audit = excluded.p90_findings_per_stored_audit
+    `,
+    [
+      snapshot.databaseBytes,
+      snapshot.auditFindingsBytes,
+      snapshot.auditRunsBytes,
+      snapshot.rawReportJsonBytes,
+      snapshot.totalFindingRows,
+      snapshot.p90FindingsPerStoredAudit,
+    ],
+  );
+
+  await pool.query(
+    `
+    delete from database_storage_snapshots
+    where captured_at < now() - interval '400 days'
+    `,
+  );
 }
 
 async function getJobForUpdate(client: PoolClient, id: number) {
@@ -3638,6 +3780,20 @@ function rowToOperationsVersionCount(row: Record<string, unknown>): OperationsVe
   return {
     version: String(row.version ?? "unknown"),
     count: Number(row.count ?? 0),
+  };
+}
+
+function rowToOperationsStorageSnapshot(
+  row: Record<string, unknown>,
+): OperationsStorageSnapshot {
+  return {
+    capturedAt: optionalIsoDate(row.captured_at) ?? new Date().toISOString(),
+    databaseBytes: Number(row.database_bytes ?? 0),
+    auditFindingsBytes: Number(row.audit_findings_bytes ?? 0),
+    auditRunsBytes: Number(row.audit_runs_bytes ?? 0),
+    rawReportJsonBytes: Number(row.raw_report_json_bytes ?? 0),
+    totalFindingRows: Number(row.total_finding_rows ?? 0),
+    p90FindingsPerStoredAudit: Number(row.p90_findings_per_stored_audit ?? 0),
   };
 }
 

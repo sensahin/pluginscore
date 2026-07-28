@@ -348,6 +348,16 @@ export type OperationsUserSubmission = {
   lastError?: string;
 };
 
+export type OperationsStorageSnapshot = {
+  capturedAt: string;
+  databaseBytes: number;
+  auditFindingsBytes: number;
+  auditRunsBytes: number;
+  rawReportJsonBytes: number;
+  totalFindingRows: number;
+  p90FindingsPerStoredAudit: number;
+};
+
 export type OperationsSummary = {
   generatedAt: string;
   coverage: {
@@ -389,6 +399,7 @@ export type OperationsSummary = {
     p90FindingsPerStoredAudit?: number;
     p99FindingsPerStoredAudit?: number;
     maxFindingsPerStoredAudit?: number;
+    history: OperationsStorageSnapshot[];
   };
   versions: {
     apiPluginCheckVersion: string;
