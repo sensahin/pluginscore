@@ -118,6 +118,11 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       {
+        source: "/plugins/:slug/rule/:code",
+        destination: "/issues/:code",
+        permanent: true,
+      },
+      {
         source: "/:path*",
         has: [
           {

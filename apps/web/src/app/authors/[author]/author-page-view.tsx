@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { AlertTriangle, Download, ExternalLink, Gauge, Package, User } from "lucide-react";
 import { cache, type ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
@@ -170,6 +170,10 @@ export async function AuthorPageView({
 
   if (!detail) {
     notFound();
+  }
+
+  if (decoded !== detail.slug) {
+    permanentRedirect(authorSortPath(detail.slug, sort, page));
   }
 
   const auditedOnly =

@@ -14,7 +14,6 @@ import { slugifyLabel } from "@/lib/route-utils";
 export const revalidate = 3_600;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const now = new Date();
   const [authors, tags, domains, issues, sitemapPlugins, comparisons] = await Promise.all([
     getAuthors(500),
     getTags(500, 1),
@@ -38,16 +37,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     "/rankings/most-improved",
     "/rankings/recently-updated",
   ];
-  const tagSortSegments = [
-    "needs-review",
-    "most-installed",
-    "most-downloaded",
-    "new-popular",
-    "most-issues",
-    "most-improved",
-    "recently-scanned",
-  ];
-  const authorSortSegments = tagSortSegments;
   const categoryRoutes = [
     ...new Set(issues.map((issue) => `/categories/${slugifyLabel(issue.family)}`)),
   ];
@@ -65,54 +54,30 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...categoryRoutes,
   ].map((path) => ({
     url: `https://pluginscore.com${path}`,
-    lastModified: now,
   }));
 
   const pluginRoutes = sitemapPlugins.map((plugin) => ({
     url: `https://pluginscore.com/plugins/${encodeURIComponent(plugin.slug)}`,
-    lastModified: dateOrFallback(plugin.updatedAt, now),
+    lastModified: validDate(plugin.updatedAt),
   }));
 
   const issueRoutes = issues.map((issue) => ({
     url: `https://pluginscore.com/issues/${encodeURIComponent(issue.code)}`,
-    lastModified: now,
   }));
 
-  const authorRoutes = authors.flatMap((author) => {
-    const authorPath = `/authors/${encodeURIComponent(author.slug || author.name)}`;
+  const authorRoutes = authors.map((author) => ({
+    url: `https://pluginscore.com/authors/${encodeURIComponent(author.slug || author.name)}`,
+  }));
 
-    return [
-      {
-        url: `https://pluginscore.com${authorPath}`,
-        lastModified: now,
-      },
-      ...authorSortSegments.map((segment) => ({
-        url: `https://pluginscore.com${authorPath}/${segment}`,
-        lastModified: now,
-      })),
-    ];
-  });
-
-  const tagRoutes = tags.flatMap((tag) => {
-    const tagPath = `/tags/${encodeURIComponent(tag.slug)}`;
-
-    return [
-      {
-        url: `https://pluginscore.com${tagPath}`,
-        lastModified: now,
-      },
-      ...tagSortSegments.map((segment) => ({
-        url: `https://pluginscore.com${tagPath}/${segment}`,
-        lastModified: now,
-      })),
-    ];
-  });
+  const tagRoutes = tags.map((tag) => ({
+    url: `https://pluginscore.com/tags/${encodeURIComponent(tag.slug)}`,
+  }));
 
   const domainRoutes = domains
     .filter((domain) => !domain.platformReference)
     .map((domain) => ({
       url: `https://pluginscore.com/domains/${encodeURIComponent(domain.domain)}`,
-      lastModified: domain.lastSeenAt ? new Date(domain.lastSeenAt) : now,
+      lastModified: validDate(domain.lastSeenAt),
     }));
 
   const featuredComparisonPaths = new Set(
@@ -123,7 +88,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const comparisonRoutes = [
     ...[...featuredComparisonPaths].map((path) => ({
       url: `https://pluginscore.com${path}`,
-      lastModified: now,
     })),
     ...comparisons.flatMap((comparison) => {
       const path = canonicalComparePath(comparison.pluginSlugs);
@@ -132,7 +96,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         ? []
         : [{
             url: `https://pluginscore.com${path}`,
-            lastModified: dateOrFallback(comparison.lastComparedAt, now),
+            lastModified: validDate(comparison.lastComparedAt),
           }];
     }),
   ];
@@ -148,11 +112,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ];
 }
 
-function dateOrFallback(value: string | undefined, fallback: Date) {
+function validDate(value: string | undefined) {
   if (!value) {
-    return fallback;
+    return undefined;
   }
 
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? fallback : date;
+  return Number.isNaN(date.getTime()) ? undefined : date;
 }

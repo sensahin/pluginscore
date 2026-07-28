@@ -413,7 +413,10 @@ export async function createServer(config: ApiConfig, store: PluginScoreStore) {
 
   app.get("/sitemap/plugins", async (request) => {
     const query = sitemapPluginsQuery.parse(request.query);
-    return store.listTrackedPlugins(query);
+    return store.listTrackedPlugins({
+      ...query,
+      auditedOnly: true,
+    });
   });
 
   app.get("/plugins/:slug", async (request, reply) => {

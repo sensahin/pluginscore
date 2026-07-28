@@ -665,11 +665,15 @@ export class MemoryStore implements PluginScoreStore {
 
   async listTrackedPlugins(options: ListTrackedPluginsOptions): Promise<TrackedPluginSummary[]> {
     return plugins
+      .filter(
+        (plugin) =>
+          !options.auditedOnly || plugin.latestAudit?.status === "complete",
+      )
       .slice(0, options.limit)
       .map((plugin) => ({
         slug: plugin.slug,
         version: plugin.version,
-        updatedAt: plugin.latestAudit?.completedAt,
+        updatedAt: plugin.lastUpdated,
       }));
   }
 

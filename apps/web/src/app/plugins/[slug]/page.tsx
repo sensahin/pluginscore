@@ -56,6 +56,13 @@ export async function generateMetadata({
       "Plugin Check",
       ...(plugin.tags ?? []).map((tag) => tag.name),
     ],
+    robots:
+      plugin.audited === false
+        ? {
+            index: false,
+            follow: true,
+          }
+        : undefined,
   };
 }
 

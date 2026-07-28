@@ -1889,12 +1889,14 @@ export class PostgresStore implements PluginScoreStore {
   async listTrackedPlugins(options: ListTrackedPluginsOptions): Promise<TrackedPluginSummary[]> {
     const result = await this.pool.query(
       `
-      select slug, current_version, updated_at
-      from plugins
-      order by updated_at desc, slug asc
+      select p.slug, p.current_version, p.last_updated_at as updated_at
+      from plugins p
+      left join plugin_current_scores pcs on pcs.plugin_id = p.id
+      where $2::boolean = false or pcs.audit_run_id is not null
+      order by p.updated_at desc, p.slug asc
       limit $1
       `,
-      [options.limit],
+      [options.limit, options.auditedOnly ?? false],
     );
 
     return result.rows.map(rowToTrackedPluginSummary);

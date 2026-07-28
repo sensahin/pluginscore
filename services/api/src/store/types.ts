@@ -60,6 +60,7 @@ export type ListQueueOptions = {
 
 export type ListTrackedPluginsOptions = {
   limit: number;
+  auditedOnly?: boolean;
 };
 
 export type GetPluginHistoryOptions = {
