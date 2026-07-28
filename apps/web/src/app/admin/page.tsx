@@ -391,91 +391,95 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       ) : null}
 
       {activeView === "system" ? (
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <section className="rounded-md border border-line bg-surface p-5">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-semibold">Backend Health</h2>
-              <Activity size={18} className="text-muted" aria-hidden="true" />
-            </div>
-            <div className="mt-4 divide-y divide-line text-sm">
-              <Meta label="API URL" value={health?.apiUrl ?? "sample data"} />
-              <Meta label="Status" value={health?.ok ? "ok" : "fallback"} />
-              <Meta label="Mode" value={health?.mode ?? "sample"} />
-            </div>
-          </section>
-
-          <section className="rounded-md border border-line bg-surface p-5">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-semibold">Maintenance</h2>
-              <Wrench size={18} className="text-muted" aria-hidden="true" />
-            </div>
-            {retention ? (
-              <div className="mt-4 divide-y divide-line text-sm">
-                <Meta label="Policy" value="latest findings" />
-                <Meta label="Stale findings" value={retention.staleFindingRows.toLocaleString()} />
-                <Meta label="Stale audits" value={retention.staleAuditRuns.toLocaleString()} />
-                <Meta label="Affected plugins" value={retention.pluginsWithStaleFindings.toLocaleString()} />
-                <Meta label="Reusable DB space" value={formatBytes(retention.estimatedReusableBytes)} />
+        <div className="grid gap-4">
+          <section className="grid gap-4 md:grid-cols-2">
+            <section className="rounded-md border border-line bg-surface p-5">
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-semibold">Backend Health</h2>
+                <Activity size={18} className="text-muted" aria-hidden="true" />
               </div>
-            ) : (
-              <p className="mt-4 text-sm leading-6 text-muted">
-                Internal maintenance check is not configured for this deployment.
-              </p>
-            )}
+              <div className="mt-4 divide-y divide-line text-sm">
+                <Meta label="API URL" value={health?.apiUrl ?? "sample data"} />
+                <Meta label="Status" value={health?.ok ? "ok" : "fallback"} />
+                <Meta label="Mode" value={health?.mode ?? "sample"} />
+              </div>
+            </section>
+
+            <section className="rounded-md border border-line bg-surface p-5">
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-semibold">Maintenance</h2>
+                <Wrench size={18} className="text-muted" aria-hidden="true" />
+              </div>
+              {retention ? (
+                <div className="mt-4 divide-y divide-line text-sm">
+                  <Meta label="Policy" value="latest findings" />
+                  <Meta label="Stale findings" value={retention.staleFindingRows.toLocaleString()} />
+                  <Meta label="Stale audits" value={retention.staleAuditRuns.toLocaleString()} />
+                  <Meta label="Affected plugins" value={retention.pluginsWithStaleFindings.toLocaleString()} />
+                  <Meta label="Reusable DB space" value={formatBytes(retention.estimatedReusableBytes)} />
+                </div>
+              ) : (
+                <p className="mt-4 text-sm leading-6 text-muted">
+                  Internal maintenance check is not configured for this deployment.
+                </p>
+              )}
+            </section>
+
+            {operations ? (
+              <>
+                <section className="rounded-md border border-line bg-surface p-5">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-base font-semibold">Retry Policy</h2>
+                    <RotateCcw size={18} className="text-muted" aria-hidden="true" />
+                  </div>
+                  <div className="mt-4 divide-y divide-line text-sm">
+                    <Meta label="Running timeout" value={formatDuration(operations.retryPolicy.runningJobTimeoutSeconds * 1000)} />
+                    <Meta label="Max attempts" value={operations.retryPolicy.runningJobMaxAttempts.toLocaleString()} />
+                    <Meta label="Retry backoff" value={formatDuration(operations.retryPolicy.scanRetryBackoffSeconds * 1000)} />
+                    <Meta label="Terminal timeouts" value={operations.retryPolicy.scanTerminalTimeoutAttempts.toLocaleString()} />
+                    <Meta label="Terminal failures" value={operations.retryPolicy.scanTerminalFailureAttempts.toLocaleString()} />
+                    <Meta label="Suppressed timeout groups" value={operations.failures.repeatedTimeoutPlugins.toLocaleString()} />
+                    <Meta label="Suppressed failure groups" value={operations.failures.repeatedFailurePlugins.toLocaleString()} />
+                    <Meta
+                      label="Excluded plugins"
+                      value={operations.retryPolicy.ignoredPluginSlugs.length > 0
+                        ? operations.retryPolicy.ignoredPluginSlugs.join(", ")
+                        : "None"}
+                    />
+                  </div>
+                </section>
+
+                <section className="rounded-md border border-line bg-surface p-5">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-base font-semibold">Versions</h2>
+                    <History size={18} className="text-muted" aria-hidden="true" />
+                  </div>
+                  <div className="mt-4 divide-y divide-line text-sm">
+                    <Meta label="Plugin Check" value={operations.versions.apiPluginCheckVersion} />
+                    <Meta label="Scoring model" value={operations.versions.scoringModelVersion} />
+                    <Meta label="Completed Check" value={formatVersionCounts(operations.versions.pluginCheckVersions)} />
+                    <Meta label="Completed Model" value={formatVersionCounts(operations.versions.scoringModelVersions)} />
+                  </div>
+                </section>
+              </>
+            ) : null}
           </section>
 
           {operations ? (
-            <>
-              <section className="rounded-md border border-line bg-surface p-5">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-base font-semibold">Retry Policy</h2>
-                  <RotateCcw size={18} className="text-muted" aria-hidden="true" />
+            <section className="rounded-md border border-line bg-surface p-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-semibold">Storage Growth</h2>
+                  <p className="mt-1 text-sm text-muted">
+                    Database size, scan storage, and finding-volume history
+                  </p>
                 </div>
-                <div className="mt-4 divide-y divide-line text-sm">
-                  <Meta label="Running timeout" value={formatDuration(operations.retryPolicy.runningJobTimeoutSeconds * 1000)} />
-                  <Meta label="Max attempts" value={operations.retryPolicy.runningJobMaxAttempts.toLocaleString()} />
-                  <Meta label="Retry backoff" value={formatDuration(operations.retryPolicy.scanRetryBackoffSeconds * 1000)} />
-                  <Meta label="Terminal timeouts" value={operations.retryPolicy.scanTerminalTimeoutAttempts.toLocaleString()} />
-                  <Meta label="Terminal failures" value={operations.retryPolicy.scanTerminalFailureAttempts.toLocaleString()} />
-                  <Meta label="Suppressed timeout groups" value={operations.failures.repeatedTimeoutPlugins.toLocaleString()} />
-                  <Meta label="Suppressed failure groups" value={operations.failures.repeatedFailurePlugins.toLocaleString()} />
-                  <Meta
-                    label="Excluded plugins"
-                    value={operations.retryPolicy.ignoredPluginSlugs.length > 0
-                      ? operations.retryPolicy.ignoredPluginSlugs.join(", ")
-                      : "None"}
-                  />
-                </div>
-              </section>
-
-              <section className="rounded-md border border-line bg-surface p-5">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-base font-semibold">Versions</h2>
-                  <History size={18} className="text-muted" aria-hidden="true" />
-                </div>
-                <div className="mt-4 divide-y divide-line text-sm">
-                  <Meta label="Plugin Check" value={operations.versions.apiPluginCheckVersion} />
-                  <Meta label="Scoring model" value={operations.versions.scoringModelVersion} />
-                  <Meta label="Completed Check" value={formatVersionCounts(operations.versions.pluginCheckVersions)} />
-                  <Meta label="Completed Model" value={formatVersionCounts(operations.versions.scoringModelVersions)} />
-                </div>
-              </section>
-
-              <section className="rounded-md border border-line bg-surface p-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-base font-semibold">Storage Growth</h2>
-                    <p className="mt-1 text-sm text-muted">
-                      Database size, scan storage, and finding-volume history
-                    </p>
-                  </div>
-                  <HardDrive size={18} className="text-muted" aria-hidden="true" />
-                </div>
-                <StorageGrowthTable storage={operations.storage} />
-              </section>
-            </>
+                <HardDrive size={18} className="text-muted" aria-hidden="true" />
+              </div>
+              <StorageGrowthTable storage={operations.storage} />
+            </section>
           ) : null}
-        </section>
+        </div>
       ) : null}
 
       {activeView === "queue" ? (
