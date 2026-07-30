@@ -35,7 +35,13 @@ import { TagChips } from "@/components/tag-chips";
 import { ScoreHistoryTable } from "@/components/score-history-table";
 import { getAuthor, getPlugins, getPluginsPage } from "@/lib/api";
 import { groupFindingCodeCounts } from "@/lib/finding-groups";
-import { formatExactDate, formatShortDate, formatSlugTitle } from "@/lib/formatting";
+import {
+  formatByteSize,
+  formatExactByteSize,
+  formatExactDate,
+  formatShortDate,
+  formatSlugTitle,
+} from "@/lib/formatting";
 import {
   sortPluginSummaries,
   uniquePluginsBySlug,
@@ -1362,28 +1368,6 @@ function MetaRow({
 
 function isExternalHref(href: string) {
   return /^https?:\/\//.test(href);
-}
-
-function formatByteSize(bytes: number | undefined) {
-  if (bytes === undefined) {
-    return undefined;
-  }
-
-  const units = ["B", "KB", "MB", "GB"];
-  let value = bytes;
-  let unitIndex = 0;
-
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex += 1;
-  }
-
-  const maximumFractionDigits = value >= 10 || unitIndex === 0 ? 0 : 1;
-  return `${value.toLocaleString(undefined, { maximumFractionDigits })} ${units[unitIndex]}`;
-}
-
-function formatExactByteSize(bytes: number | undefined) {
-  return bytes === undefined ? undefined : `${bytes.toLocaleString()} bytes`;
 }
 
 function scorePointTitle(point: PluginScoreHistoryPoint) {

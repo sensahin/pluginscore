@@ -8,13 +8,22 @@ import { RememberComparison } from "@/components/remember-comparison";
 import { ScoreBadge } from "@/components/score-badge";
 import { parseCompactNumber } from "@/lib/compare";
 import { groupFindingCodeCounts } from "@/lib/finding-groups";
-import { formatExactDate } from "@/lib/formatting";
+import {
+  formatByteSize,
+  formatExactByteSize,
+  formatExactDate,
+} from "@/lib/formatting";
 import { formatPluginDirectoryAge } from "@/lib/plugin-age";
 
 export type ComparisonEntry = {
   plugin: PluginDetail;
   history: PluginScoreHistoryPoint[];
   color: string;
+};
+
+type ComparisonRow = {
+  label: string;
+  values: ReactNode[];
 };
 
 export const comparisonChartColors = [
@@ -78,6 +87,7 @@ export function ComparisonPageView({ entries }: { entries: ComparisonEntry[] }) 
                 label: "Directory age",
                 values: entries.map((entry) => formatPluginDirectoryAge(entry.plugin.addedAt) ?? "Unknown"),
               },
+              ...footprintRows(entries),
             ]}
           />
         </ComparisonSection>
@@ -259,10 +269,7 @@ function ComparisonTable({
   rows,
 }: {
   entries: ComparisonEntry[];
-  rows: Array<{
-    label: string;
-    values: ReactNode[];
-  }>;
+  rows: ComparisonRow[];
 }) {
   const labelColumnWidth = 220;
   const valueColumnWidth = 280;
@@ -356,6 +363,102 @@ function PendingLabel() {
       Pending
     </span>
   );
+}
+
+function footprintRows(entries: ComparisonEntry[]): ComparisonRow[] {
+  const hasFootprintData = entries.some((entry) => {
+    const audit = entry.plugin.latestAudit;
+    return audit?.packageSizeBytes !== undefined
+      || audit?.installedSizeBytes !== undefined
+      || audit?.fileCount !== undefined;
+  });
+
+  if (!hasFootprintData) {
+    return [];
+  }
+
+  return [
+    {
+      label: "Package size",
+      values: entries.map((entry) => (
+        <SizeComparisonValue
+          key={`${entry.plugin.slug}-package-size`}
+          bytes={entry.plugin.latestAudit?.packageSizeBytes}
+          pluginVersion={entry.plugin.latestAudit?.pluginVersion}
+        />
+      )),
+    },
+    {
+      label: "Installed size",
+      values: entries.map((entry) => (
+        <SizeComparisonValue
+          key={`${entry.plugin.slug}-installed-size`}
+          bytes={entry.plugin.latestAudit?.installedSizeBytes}
+          pluginVersion={entry.plugin.latestAudit?.pluginVersion}
+        />
+      )),
+    },
+    {
+      label: "Files",
+      values: entries.map((entry) => (
+        <FileCountComparisonValue
+          key={`${entry.plugin.slug}-file-count`}
+          count={entry.plugin.latestAudit?.fileCount}
+          pluginVersion={entry.plugin.latestAudit?.pluginVersion}
+        />
+      )),
+    },
+  ];
+}
+
+function SizeComparisonValue({
+  bytes,
+  pluginVersion,
+}: {
+  bytes?: number;
+  pluginVersion?: string;
+}) {
+  if (bytes === undefined) {
+    return <PendingNextScan />;
+  }
+
+  const exactSize = formatExactByteSize(bytes);
+  const title = pluginVersion
+    ? `${exactSize} · Plugin v${pluginVersion}`
+    : exactSize;
+
+  return (
+    <span className="font-mono" title={title}>
+      {formatByteSize(bytes)}
+    </span>
+  );
+}
+
+function FileCountComparisonValue({
+  count,
+  pluginVersion,
+}: {
+  count?: number;
+  pluginVersion?: string;
+}) {
+  if (count === undefined) {
+    return <PendingNextScan />;
+  }
+
+  const formattedCount = count.toLocaleString();
+  const title = pluginVersion
+    ? `${formattedCount} files · Plugin v${pluginVersion}`
+    : `${formattedCount} files`;
+
+  return (
+    <span className="font-mono" title={title}>
+      {formattedCount}
+    </span>
+  );
+}
+
+function PendingNextScan() {
+  return <span className="text-muted">Pending next scan</span>;
 }
 
 function IssueCategoryList({ plugin }: { plugin: PluginDetail }) {

@@ -44,6 +44,28 @@ export function formatExactDate(value?: string) {
   }).format(date);
 }
 
+export function formatByteSize(bytes: number | undefined) {
+  if (bytes === undefined) {
+    return undefined;
+  }
+
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let unitIndex = 0;
+
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+
+  const maximumFractionDigits = value >= 10 || unitIndex === 0 ? 0 : 1;
+  return `${value.toLocaleString(undefined, { maximumFractionDigits })} ${units[unitIndex]}`;
+}
+
+export function formatExactByteSize(bytes: number | undefined) {
+  return bytes === undefined ? undefined : `${bytes.toLocaleString()} bytes`;
+}
+
 export function formatRelativeDate(value?: string, referenceDate = new Date()) {
   if (!value) {
     return "Unknown";
