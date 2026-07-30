@@ -5,6 +5,7 @@ import {
   cleanupJobDirectory,
   downloadZip,
   extractZip,
+  measurePluginDirectory,
   prepareJobDirectory,
 } from "./files.js";
 import {
@@ -79,8 +80,15 @@ async function scanOnce() {
 
   try {
     console.log(`Scanning ${job.slug}@${job.targetVersion} from ${job.downloadUrl}`);
-    const { zipPath, sha256 } = await downloadZip(job.downloadUrl, jobDir, job.slug);
+    const { zipPath, sha256, packageSizeBytes } = await downloadZip(
+      job.downloadUrl,
+      jobDir,
+      job.slug,
+    );
     const extracted = await extractZip(zipPath, jobDir, job.slug);
+    const { installedSizeBytes, fileCount } = await measurePluginDirectory(
+      extracted.pluginDir,
+    );
     const result = await runPluginCheck(
       job,
       {
@@ -104,6 +112,9 @@ async function scanOnce() {
       scoringModelVersion: SCORING_MODEL_VERSION,
       sourceDownloadUrl: job.downloadUrl,
       sourceSha256: sha256,
+      packageSizeBytes,
+      installedSizeBytes,
+      fileCount,
       durationMs: result.durationMs,
       exitCode: result.exitCode,
       rawReport: result.rawReport,

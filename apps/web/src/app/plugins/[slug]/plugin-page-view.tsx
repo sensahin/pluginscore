@@ -1199,6 +1199,20 @@ function PluginMetadata({
         />
         <MetaRow label="Version" value={plugin.version} />
         <MetaRow
+          label="Package size"
+          value={formatByteSize(plugin.latestAudit?.packageSizeBytes)}
+          title={formatExactByteSize(plugin.latestAudit?.packageSizeBytes)}
+        />
+        <MetaRow
+          label="Installed size"
+          value={formatByteSize(plugin.latestAudit?.installedSizeBytes)}
+          title={formatExactByteSize(plugin.latestAudit?.installedSizeBytes)}
+        />
+        <MetaRow
+          label="Files"
+          value={plugin.latestAudit?.fileCount?.toLocaleString()}
+        />
+        <MetaRow
           label="Directory age"
           value={formatPluginDirectoryAge(plugin.addedAt)}
         />
@@ -1348,6 +1362,28 @@ function MetaRow({
 
 function isExternalHref(href: string) {
   return /^https?:\/\//.test(href);
+}
+
+function formatByteSize(bytes: number | undefined) {
+  if (bytes === undefined) {
+    return undefined;
+  }
+
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let unitIndex = 0;
+
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+
+  const maximumFractionDigits = value >= 10 || unitIndex === 0 ? 0 : 1;
+  return `${value.toLocaleString(undefined, { maximumFractionDigits })} ${units[unitIndex]}`;
+}
+
+function formatExactByteSize(bytes: number | undefined) {
+  return bytes === undefined ? undefined : `${bytes.toLocaleString()} bytes`;
 }
 
 function scorePointTitle(point: PluginScoreHistoryPoint) {

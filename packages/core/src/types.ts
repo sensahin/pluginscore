@@ -69,6 +69,9 @@ export type AuditRunSummary = {
   exitCode?: number;
   timedOut: boolean;
   sourceSha256?: string;
+  packageSizeBytes?: number;
+  installedSizeBytes?: number;
+  fileCount?: number;
   rawReportObjectKey?: string;
   rawReportStored?: boolean;
   completedAt?: string;
@@ -630,6 +633,9 @@ export type ScanCompletePayload = {
   scoringModelVersion: string;
   sourceDownloadUrl: string;
   sourceSha256?: string;
+  packageSizeBytes?: number;
+  installedSizeBytes?: number;
+  fileCount?: number;
   durationMs: number;
   exitCode: number;
   rawReportObjectKey?: string;

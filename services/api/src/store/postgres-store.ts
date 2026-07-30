@@ -2327,14 +2327,16 @@ export class PostgresStore implements PluginScoreStore {
         insert into audit_runs (
           plugin_id, plugin_version, plugin_check_version,
           scoring_model_version, source_download_url, source_sha256,
+          package_size_bytes, installed_size_bytes, file_count,
           status, exit_code, timed_out, duration_ms, stderr,
           trigger_reason, raw_report_object_key, raw_report_json,
           started_at, completed_at
         )
         values (
           $1, $2, $3, $4, $5, $6,
-          'complete', $7, false, $8, $9,
-          $10, $11, $12::jsonb, now(), now()
+          $7, $8, $9,
+          'complete', $10, false, $11, $12,
+          $13, $14, $15::jsonb, now(), now()
         )
         returning id
         `,
@@ -2345,6 +2347,9 @@ export class PostgresStore implements PluginScoreStore {
           payload.scoringModelVersion,
           payload.sourceDownloadUrl,
           payload.sourceSha256 ?? null,
+          payload.packageSizeBytes ?? null,
+          payload.installedSizeBytes ?? null,
+          payload.fileCount ?? null,
           payload.exitCode,
           payload.durationMs,
           payload.stderr ?? null,
@@ -2505,6 +2510,9 @@ export class PostgresStore implements PluginScoreStore {
         exit_code,
         timed_out,
         source_sha256,
+        package_size_bytes,
+        installed_size_bytes,
+        file_count,
         raw_report_object_key,
         raw_report_json is not null as raw_report_stored,
         completed_at,
@@ -4081,6 +4089,9 @@ function rowToAuditRunSummary(row: Record<string, unknown>): AuditRunSummary {
     exitCode: optionalNumber(row.exit_code),
     timedOut: Boolean(row.timed_out),
     sourceSha256: optionalString(row.source_sha256),
+    packageSizeBytes: optionalNumber(row.package_size_bytes),
+    installedSizeBytes: optionalNumber(row.installed_size_bytes),
+    fileCount: optionalNumber(row.file_count),
     rawReportObjectKey: optionalString(row.raw_report_object_key),
     rawReportStored: Boolean(row.raw_report_stored),
     completedAt: row.completed_at ? new Date(String(row.completed_at)).toISOString() : undefined,

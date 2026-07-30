@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { mkdir, readFile, rm, stat } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, rm, stat } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import { Readable } from "node:stream";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
@@ -41,7 +41,7 @@ export async function downloadZip(url: string, jobDir: string, slug: string) {
   const bytes = await readFile(zipPath);
   const sha256 = createHash("sha256").update(bytes).digest("hex");
 
-  return { zipPath, sha256 };
+  return { zipPath, sha256, packageSizeBytes: bytes.byteLength };
 }
 
 async function fetchWithRetry(url: string) {
@@ -96,6 +96,37 @@ export async function extractZip(zipPath: string, jobDir: string, slug: string) 
 
 export async function cleanupJobDirectory(jobDir: string) {
   await rm(jobDir, { recursive: true, force: true });
+}
+
+export async function measurePluginDirectory(pluginDir: string) {
+  const pendingDirectories = [pluginDir];
+  let installedSizeBytes = 0;
+  let fileCount = 0;
+
+  while (pendingDirectories.length > 0) {
+    const directory = pendingDirectories.pop();
+
+    if (!directory) {
+      continue;
+    }
+
+    const entries = await readdir(directory, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const entryPath = join(directory, entry.name);
+
+      if (entry.isDirectory()) {
+        pendingDirectories.push(entryPath);
+        continue;
+      }
+
+      const entryStats = await lstat(entryPath);
+      installedSizeBytes += entryStats.size;
+      fileCount += 1;
+    }
+  }
+
+  return { installedSizeBytes, fileCount };
 }
 
 async function assertSafeZipEntries(zipPath: string) {

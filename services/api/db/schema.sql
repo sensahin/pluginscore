@@ -186,6 +186,9 @@ create table if not exists audit_runs (
   scoring_model_version text not null,
   source_download_url text not null,
   source_sha256 text,
+  package_size_bytes bigint,
+  installed_size_bytes bigint,
+  file_count integer,
   status text not null check (status in ('queued', 'running', 'complete', 'failed', 'timeout')),
   exit_code integer,
   timed_out boolean not null default false,
@@ -201,6 +204,9 @@ create table if not exists audit_runs (
 
 alter table if exists audit_runs add column if not exists raw_report_json jsonb;
 alter table if exists audit_runs add column if not exists trigger_reason text not null default 'unknown';
+alter table if exists audit_runs add column if not exists package_size_bytes bigint;
+alter table if exists audit_runs add column if not exists installed_size_bytes bigint;
+alter table if exists audit_runs add column if not exists file_count integer;
 
 create table if not exists plugin_reports (
   id bigserial primary key,
