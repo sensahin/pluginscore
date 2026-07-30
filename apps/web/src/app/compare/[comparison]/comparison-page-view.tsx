@@ -87,7 +87,6 @@ export function ComparisonPageView({ entries }: { entries: ComparisonEntry[] }) 
                 label: "Directory age",
                 values: entries.map((entry) => formatPluginDirectoryAge(entry.plugin.addedAt) ?? "Unknown"),
               },
-              ...footprintRows(entries),
             ]}
           />
         </ComparisonSection>
@@ -154,6 +153,7 @@ export function ComparisonPageView({ entries }: { entries: ComparisonEntry[] }) 
                 label: "Version",
                 values: entries.map((entry) => entry.plugin.version),
               },
+              ...footprintRows(entries),
               {
                 label: "Downloads",
                 values: entries.map((entry) => entry.plugin.downloads),
