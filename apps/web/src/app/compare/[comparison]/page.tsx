@@ -21,7 +21,7 @@ type CompareRouteProps = {
   }>;
 };
 
-export const revalidate = 1_800;
+export const revalidate = 43_200;
 
 export async function generateMetadata({
   params,

@@ -25,7 +25,7 @@ type DomainPageProps = {
   params: Promise<{ domain: string }>;
 };
 
-export const revalidate = 1_800;
+export const revalidate = 43_200;
 
 export async function generateStaticParams() {
   const domains = await getExternalDomains(50, INDEXABLE_DOMAIN_PLUGIN_MINIMUM);

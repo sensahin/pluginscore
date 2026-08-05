@@ -4,16 +4,13 @@ import {
   authorSortFromSegment,
   AuthorPageView,
   generateAuthorMetadata,
-  generateAuthorSortStaticParams,
 } from "../author-page-view";
 
-export const revalidate = 1_800;
+export const revalidate = 86_400;
 
 type AuthorSortPageProps = {
   params: Promise<{ author: string; sort: string }>;
 };
-
-export const generateStaticParams = generateAuthorSortStaticParams;
 
 export async function generateMetadata({
   params,

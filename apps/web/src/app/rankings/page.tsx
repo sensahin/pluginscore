@@ -1,6 +1,6 @@
 import { generateRankingMetadata, RankingPageView } from "./ranking-page-view";
 
-export const revalidate = 1_800;
+export const revalidate = 21_600;
 
 export const metadata = generateRankingMetadata({});
 

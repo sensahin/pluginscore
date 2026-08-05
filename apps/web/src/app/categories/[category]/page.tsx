@@ -4,7 +4,7 @@ import {
   generateCategoryMetadata,
 } from "./category-page-view";
 
-export const revalidate = 1_800;
+export const revalidate = 43_200;
 
 type CategoryPageProps = {
   params: Promise<{ category: string }>;

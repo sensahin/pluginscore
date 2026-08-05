@@ -37,11 +37,17 @@ export async function generateIssueMetadata({
 
   const issueTitle = seoDisplayName(issue.title);
 
-  return seoMetadata({
-    title: titleWithPage(`${issueTitle} in WordPress Plugins`, page),
-    description: `Learn what ${issueTitle} means in WordPress plugins, why Plugin Check reports it, why it matters, and how to fix the finding.`,
-    path: issuePagePath(issue.code, page),
-  });
+  return {
+    ...seoMetadata({
+      title: titleWithPage(`${issueTitle} in WordPress Plugins`, page),
+      description: `Learn what ${issueTitle} means in WordPress plugins, why Plugin Check reports it, why it matters, and how to fix the finding.`,
+      path: issuePagePath(issue.code),
+    }),
+    robots: {
+      index: page === 1,
+      follow: true,
+    },
+  };
 }
 
 export async function IssuePageView({ code, page = 1 }: IssuePageViewProps) {

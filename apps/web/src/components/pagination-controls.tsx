@@ -102,6 +102,8 @@ function PageLink({
   return (
     <Link
       href={href}
+      prefetch={false}
+      rel="nofollow"
       aria-label={label}
       aria-current={current ? "page" : undefined}
       aria-disabled={disabled ? true : undefined}

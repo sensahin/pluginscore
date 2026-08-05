@@ -5,7 +5,7 @@ import {
   IssuePageView,
 } from "./issue-page-view";
 
-export const revalidate = 1_800;
+export const revalidate = 43_200;
 
 type IssuePageProps = {
   params: Promise<{ code: string }>;

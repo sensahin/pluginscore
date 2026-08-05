@@ -67,7 +67,6 @@ type AuthorPageViewProps = {
 };
 
 const STATIC_AUTHOR_LIMIT = 50;
-const STATIC_AUTHOR_SORT_LIMIT = 10;
 const AUTHOR_PLUGIN_LIMIT = 80;
 const getAuthorPageData = cache((author: string) =>
   getAuthor(author, AUTHOR_PLUGIN_LIMIT),
@@ -83,20 +82,6 @@ const authorSortBySegment = Object.fromEntries(
 export async function generateAuthorStaticParams() {
   const authors = await getAuthors(STATIC_AUTHOR_LIMIT);
   return authors.map((author) => ({ author: author.slug || author.name }));
-}
-
-export async function generateAuthorSortStaticParams() {
-  const authors = await getAuthors(STATIC_AUTHOR_SORT_LIMIT);
-  const sortSegments = (Object.keys(authorSorts) as AuthorSort[])
-    .filter((sort) => sort !== "score_desc")
-    .map((sort) => authorSorts[sort].segment);
-
-  return authors.flatMap((author) =>
-    sortSegments.map((sort) => ({
-      author: author.slug || author.name,
-      sort,
-    })),
-  );
 }
 
 export function authorSortFromSegment(segment: string) {
@@ -139,12 +124,14 @@ export async function generateAuthorMetadata({
       ? `${displayName} WordPress plugins: ${detail.pluginCount} indexed plugin${detail.pluginCount === 1 ? "" : "s"}${installText}${scoreText}. See audits, findings, downloads, and metadata.`
       : `Browse WordPress plugins by ${displayName}, including PluginScore audit results, findings, installs, downloads, and repository metadata.`;
   const title = authorSeoTitle(displayName, sort);
+  const canonicalPath = authorSortPath(detail?.slug ?? displayName);
+  const shouldIndex = sort === "score_desc" && page === 1;
 
   return {
     ...seoMetadata({
       title: titleWithPage(title, page),
       description,
-      path: authorSortPath(detail?.slug ?? displayName, sort, page),
+      path: canonicalPath,
     }),
     keywords: [
       displayName,
@@ -154,7 +141,7 @@ export async function generateAuthorMetadata({
     ],
     authors: [{ name: displayName }],
     robots: {
-      index: true,
+      index: shouldIndex,
       follow: true,
     },
   };
@@ -304,6 +291,8 @@ export async function AuthorPageView({
               <Link
                 key={sortKey}
                 href={authorSortPath(detail.slug, sortKey)}
+                prefetch={false}
+                rel={sortKey === "score_desc" ? undefined : "nofollow"}
                 className={`rounded-md border px-3 py-2 text-sm font-medium transition ${
                   sortKey === sort
                     ? "border-brand/40 bg-brand/10 text-foreground"

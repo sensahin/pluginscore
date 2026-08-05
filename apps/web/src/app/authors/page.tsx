@@ -10,7 +10,7 @@ export const metadata = seoMetadata({
   path: "/authors",
 });
 
-export const revalidate = 1_800;
+export const revalidate = 86_400;
 
 const AUTHOR_INDEX_LIMIT = 150;
 

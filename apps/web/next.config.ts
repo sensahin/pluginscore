@@ -3,22 +3,33 @@ import type { NextConfig } from "next";
 const publicPageCacheHeaders = [
   {
     key: "Cache-Control",
-    value: "public, max-age=0, s-maxage=1800, stale-while-revalidate=86400",
+    value: "public, max-age=0, s-maxage=21600, stale-while-revalidate=604800",
   },
   {
     key: "Vercel-CDN-Cache-Control",
-    value: "public, max-age=0, s-maxage=1800, stale-while-revalidate=86400",
+    value: "public, max-age=0, s-maxage=21600, stale-while-revalidate=604800",
+  },
+];
+
+const stablePublicCacheHeaders = [
+  {
+    key: "Cache-Control",
+    value: "public, max-age=0, s-maxage=43200, stale-while-revalidate=604800",
+  },
+  {
+    key: "Vercel-CDN-Cache-Control",
+    value: "public, max-age=0, s-maxage=43200, stale-while-revalidate=604800",
   },
 ];
 
 const longLivedPublicCacheHeaders = [
   {
     key: "Cache-Control",
-    value: "public, max-age=0, s-maxage=3600, stale-while-revalidate=86400",
+    value: "public, max-age=0, s-maxage=86400, stale-while-revalidate=604800",
   },
   {
     key: "Vercel-CDN-Cache-Control",
-    value: "public, max-age=0, s-maxage=3600, stale-while-revalidate=86400",
+    value: "public, max-age=0, s-maxage=86400, stale-while-revalidate=604800",
   },
 ];
 
@@ -51,35 +62,43 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/about",
-        headers: publicPageCacheHeaders,
+        headers: longLivedPublicCacheHeaders,
       },
       {
         source: "/authors",
-        headers: publicPageCacheHeaders,
+        headers: longLivedPublicCacheHeaders,
       },
       {
         source: "/authors/:path*",
-        headers: publicPageCacheHeaders,
+        headers: stablePublicCacheHeaders,
       },
       {
         source: "/categories/:path*",
-        headers: publicPageCacheHeaders,
+        headers: stablePublicCacheHeaders,
       },
       {
         source: "/compare",
-        headers: publicPageCacheHeaders,
+        headers: stablePublicCacheHeaders,
       },
       {
         source: "/compare/:path*",
-        headers: publicPageCacheHeaders,
+        headers: stablePublicCacheHeaders,
+      },
+      {
+        source: "/domains",
+        headers: longLivedPublicCacheHeaders,
+      },
+      {
+        source: "/domains/:path*",
+        headers: stablePublicCacheHeaders,
       },
       {
         source: "/issues",
-        headers: publicPageCacheHeaders,
+        headers: longLivedPublicCacheHeaders,
       },
       {
         source: "/issues/:path*",
-        headers: publicPageCacheHeaders,
+        headers: stablePublicCacheHeaders,
       },
       {
         source: "/methodology",
@@ -99,11 +118,11 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/tags",
-        headers: publicPageCacheHeaders,
+        headers: longLivedPublicCacheHeaders,
       },
       {
         source: "/tags/:path*",
-        headers: publicPageCacheHeaders,
+        headers: stablePublicCacheHeaders,
       },
       {
         source: "/sitemap.xml",

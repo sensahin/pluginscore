@@ -5,7 +5,7 @@ import {
   generateAuthorStaticParams,
 } from "./author-page-view";
 
-export const revalidate = 1_800;
+export const revalidate = 43_200;
 
 type AuthorPageProps = {
   params: Promise<{ author: string }>;

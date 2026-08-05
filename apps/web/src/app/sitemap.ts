@@ -11,7 +11,7 @@ import { canonicalComparePath } from "@/lib/compare";
 import { FEATURED_COMPARISON_SLUGS } from "@/lib/featured-comparisons";
 import { slugifyLabel } from "@/lib/route-utils";
 
-export const revalidate = 3_600;
+export const revalidate = 86_400;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const [authors, tags, domains, issues, sitemapPlugins, comparisons] = await Promise.all([

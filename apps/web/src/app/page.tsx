@@ -27,7 +27,7 @@ export const metadata = seoMetadata({
   absoluteTitle: true,
 });
 
-export const revalidate = 1_800;
+export const revalidate = 21_600;
 
 export default async function Home() {
   const [

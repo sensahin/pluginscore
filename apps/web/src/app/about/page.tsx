@@ -9,7 +9,7 @@ export const metadata = seoMetadata({
   absoluteTitle: true,
 });
 
-export const revalidate = 1_800;
+export const revalidate = 86_400;
 
 export default function AboutPage() {
   return (

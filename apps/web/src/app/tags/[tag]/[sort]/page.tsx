@@ -2,18 +2,15 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import {
   generateTagMetadata,
-  generateTagSortStaticParams,
   tagSortFromSegment,
   TagPageView,
 } from "../tag-page-view";
 
-export const revalidate = 1_800;
+export const revalidate = 86_400;
 
 type TagSortPageProps = {
   params: Promise<{ tag: string; sort: string }>;
 };
-
-export const generateStaticParams = generateTagSortStaticParams;
 
 export async function generateMetadata({
   params,

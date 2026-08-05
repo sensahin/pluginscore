@@ -5,12 +5,12 @@ import {
   renderPluginScoreBadge,
 } from "@/lib/plugin-badge";
 
-export const revalidate = 1_800;
+export const revalidate = 21_600;
 
 const badgeCacheHeaders = {
   "Content-Type": "image/svg+xml; charset=utf-8",
-  "Cache-Control": "public, max-age=0, s-maxage=1800, stale-while-revalidate=86400",
-  "Vercel-CDN-Cache-Control": "public, max-age=0, s-maxage=1800, stale-while-revalidate=86400",
+  "Cache-Control": "public, max-age=0, s-maxage=21600, stale-while-revalidate=604800",
+  "Vercel-CDN-Cache-Control": "public, max-age=0, s-maxage=21600, stale-while-revalidate=604800",
   "X-Robots-Tag": "noindex",
 };
 

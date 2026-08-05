@@ -11,7 +11,7 @@ export const metadata = seoMetadata({
   path: "/tags",
 });
 
-export const revalidate = 1_800;
+export const revalidate = 86_400;
 
 export default async function TagsPage() {
   const tags = await getTags(200);

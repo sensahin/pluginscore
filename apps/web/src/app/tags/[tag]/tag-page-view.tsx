@@ -66,7 +66,6 @@ type TagPageViewProps = {
 };
 
 const STATIC_TAG_LIMIT = 50;
-const STATIC_TAG_SORT_LIMIT = 10;
 const TAG_SUMMARY_PREVIEW_LIMIT = 0;
 
 const tagSortBySegment = Object.fromEntries(
@@ -79,20 +78,6 @@ const tagSortBySegment = Object.fromEntries(
 export async function generateTagStaticParams() {
   const tags = await getTags(STATIC_TAG_LIMIT, 1);
   return tags.map((tag) => ({ tag: tag.slug }));
-}
-
-export async function generateTagSortStaticParams() {
-  const tags = await getTags(STATIC_TAG_SORT_LIMIT, 3);
-  const sortSegments = (Object.keys(tagSorts) as TagSort[])
-    .filter((sort) => sort !== "score_desc")
-    .map((sort) => tagSorts[sort].segment);
-
-  return tags.flatMap((tag) =>
-    sortSegments.map((sort) => ({
-      tag: tag.slug,
-      sort,
-    })),
-  );
 }
 
 export function tagSortFromSegment(segment: string) {
@@ -126,12 +111,14 @@ export async function generateTagMetadata({
       ? `Compare ${detail.pluginCount.toLocaleString()} ${displayName} WordPress plugins by audit score, Plugin Check findings, issue counts, installs, ratings, and update activity.${scoreText}`
       : `Compare ${displayName} WordPress plugins by audit score, Plugin Check findings, issue counts, installs, ratings, and update activity.`;
   const title = tagSeoTitle(displayName, sort);
+  const canonicalPath = tagSortPath(detail?.slug ?? tag);
+  const shouldIndex = sort === "score_desc" && page === 1;
 
   return {
     ...seoMetadata({
       title: titleWithPage(title, page),
       description,
-      path: tagSortPath(detail?.slug ?? tag, sort, page),
+      path: canonicalPath,
     }),
     keywords: [
       displayName,
@@ -142,6 +129,10 @@ export async function generateTagMetadata({
       "WordPress plugin security signals",
       "WordPress plugin ranking",
     ],
+    robots: {
+      index: shouldIndex,
+      follow: true,
+    },
   };
 }
 
@@ -249,6 +240,8 @@ export async function TagPageView({
               <Link
                 key={sortKey}
                 href={tagSortPath(detail.slug, sortKey)}
+                prefetch={false}
+                rel={sortKey === "score_desc" ? undefined : "nofollow"}
                 className={`rounded-md border px-3 py-2 text-sm font-medium transition ${
                   sortKey === sort
                     ? "border-brand/40 bg-brand/10 text-foreground"

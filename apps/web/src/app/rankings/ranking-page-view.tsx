@@ -117,11 +117,17 @@ export function generateRankingMetadata({
 }: RankingPageViewProps): Metadata {
   const ranking = rankingKinds[kind ?? defaultRankingKind];
 
-  return seoMetadata({
-    title: titleWithPage(ranking.seoTitle, page),
-    description: ranking.description,
-    path: rankingPagePath(kind, page),
-  });
+  return {
+    ...seoMetadata({
+      title: titleWithPage(ranking.seoTitle, page),
+      description: ranking.description,
+      path: rankingPagePath(kind),
+    }),
+    robots: {
+      index: page === 1,
+      follow: true,
+    },
+  };
 }
 
 export async function RankingPageView({ kind, page = 1 }: RankingPageViewProps) {

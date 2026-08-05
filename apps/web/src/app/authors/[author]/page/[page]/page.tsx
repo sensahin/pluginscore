@@ -7,7 +7,7 @@ import {
 } from "../../author-page-view";
 import { pageFromSegment } from "@/lib/pagination";
 
-export const revalidate = 1_800;
+export const revalidate = 86_400;
 export const dynamic = "force-static";
 
 type AuthorPaginatedPageProps = {

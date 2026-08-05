@@ -8,7 +8,7 @@ import {
   TagPageView,
 } from "../../../tag-page-view";
 
-export const revalidate = 1_800;
+export const revalidate = 86_400;
 export const dynamic = "force-static";
 
 type TagSortPaginatedPageProps = {

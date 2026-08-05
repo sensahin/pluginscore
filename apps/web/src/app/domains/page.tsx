@@ -10,7 +10,7 @@ export const metadata = seoMetadata({
   path: "/domains",
 });
 
-export const revalidate = 1_800;
+export const revalidate = 86_400;
 
 export default async function DomainsPage() {
   const domains = await getExternalDomains(200);

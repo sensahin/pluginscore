@@ -35,11 +35,17 @@ export async function generateCategoryMetadata({
   const categoryName = seoDisplayName(titleFromSlug(category));
   const title = `${categoryName} WordPress Plugin Scores`;
 
-  return seoMetadata({
-    title: titleWithPage(title, page),
-    description: `${categoryName} WordPress plugin scores and Plugin Check issue codes, including affected plugins, scoring weights, explanations, and fix guidance.`,
-    path: categoryPagePath(category, page),
-  });
+  return {
+    ...seoMetadata({
+      title: titleWithPage(title, page),
+      description: `${categoryName} WordPress plugin scores and Plugin Check issue codes, including affected plugins, scoring weights, explanations, and fix guidance.`,
+      path: categoryPagePath(category),
+    }),
+    robots: {
+      index: page === 1,
+      follow: true,
+    },
+  };
 }
 
 export async function CategoryPageView({

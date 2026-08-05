@@ -93,9 +93,10 @@ type HealthStatus = {
 
 const apiBaseUrl = process.env.PLUGINSCORE_API_URL;
 const internalApiToken = process.env.PLUGINSCORE_API_INTERNAL_TOKEN ?? process.env.API_INTERNAL_TOKEN;
-const DEFAULT_API_REVALIDATE_SECONDS = 1_800;
-const PLUGIN_DETAIL_REVALIDATE_SECONDS = 900;
-const STALE_API_CACHE_SECONDS = 21_600;
+const DEFAULT_API_REVALIDATE_SECONDS = 86_400;
+const PLUGIN_DETAIL_REVALIDATE_SECONDS = 21_600;
+const FALLBACK_API_CACHE_REFRESH_SECONDS = 604_800;
+const FALLBACK_API_CACHE_TTL_SECONDS = 2_592_000;
 const allowSampleFallback =
   process.env.PLUGINSCORE_ALLOW_SAMPLE_DATA === "true" ||
   process.env.NODE_ENV !== "production";
@@ -529,7 +530,7 @@ export async function getPopularComparisons({
   return fetchFromApi<ComparisonSummary[]>(
     `/comparisons/popular?${params.toString()}`,
     [],
-    { revalidate: 300 },
+    { revalidate: DEFAULT_API_REVALIDATE_SECONDS },
   );
 }
 
@@ -592,8 +593,12 @@ async function fetchFromApi<T>(
     throw new Error(`PLUGINSCORE_API_URL is required to fetch ${path}`);
   }
 
+  const cacheKey = publicApiCacheKey(path, options);
+  const fallbackCacheEntry = cacheKey
+    ? readPublicApiCacheEntry<T>(cacheKey)
+    : Promise.resolve(undefined);
+
   try {
-    const cacheKey = publicApiCacheKey(path, options);
     const fetchOptions = options.cache
       ? { cache: options.cache }
       : { next: { revalidate: options.revalidate ?? DEFAULT_API_REVALIDATE_SECONDS } };
@@ -613,13 +618,16 @@ async function fetchFromApi<T>(
     const result = (await response.json()) as T;
 
     if (cacheKey) {
-      await writePublicApiCache(cacheKey, result, options.revalidate);
+      const existingEntry = await fallbackCacheEntry;
+
+      if (shouldRefreshPublicApiCache(existingEntry)) {
+        await writePublicApiCache(cacheKey, result);
+      }
     }
 
     return result;
   } catch (error) {
-    const cacheKey = publicApiCacheKey(path, options);
-    const cached = cacheKey ? await readPublicApiCache<T>(cacheKey) : undefined;
+    const cached = (await fallbackCacheEntry)?.value;
 
     if (cached !== undefined) {
       console.warn(`Using cached PluginScore API data for ${path}:`, error);
@@ -643,22 +651,33 @@ function publicApiCacheKey(path: string, options: FetchFromApiOptions) {
   return `public-api:${path}`;
 }
 
-async function readPublicApiCache<T>(key: string) {
+async function readPublicApiCacheEntry<T>(key: string) {
   try {
     const cached = await getCache({ namespace: "pluginscore-web" }).get(key) as
       | RuntimeCacheEntry<T>
-      | undefined;
-    return cached?.value;
+      | null;
+    return cached ?? undefined;
   } catch (error) {
     console.warn(`PluginScore API cache read failed for ${key}:`, error);
     return undefined;
   }
 }
 
+function shouldRefreshPublicApiCache<T>(entry: RuntimeCacheEntry<T> | undefined) {
+  if (!entry) {
+    return true;
+  }
+
+  const cachedAt = Date.parse(entry.cachedAt);
+  return (
+    !Number.isFinite(cachedAt) ||
+    Date.now() - cachedAt >= FALLBACK_API_CACHE_REFRESH_SECONDS * 1_000
+  );
+}
+
 async function writePublicApiCache<T>(
   key: string,
   value: T,
-  revalidateSeconds = DEFAULT_API_REVALIDATE_SECONDS,
 ) {
   try {
     await getCache({ namespace: "pluginscore-web" }).set(
@@ -668,7 +687,7 @@ async function writePublicApiCache<T>(
         cachedAt: new Date().toISOString(),
       },
       {
-        ttl: Math.max(STALE_API_CACHE_SECONDS, revalidateSeconds * 4),
+        ttl: FALLBACK_API_CACHE_TTL_SECONDS,
         tags: ["pluginscore-public-api"],
         name: "PluginScore public API response",
       },
