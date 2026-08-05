@@ -98,6 +98,7 @@ export class PluginScoreApiClient {
     const response = await fetch(new URL("/maintenance/raw-report-retention", this.baseUrl), {
       method: "POST",
       headers: this.requestHeaders(),
+      body: "{}",
       signal: AbortSignal.timeout(40_000),
     });
 
