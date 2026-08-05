@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { AdminExternalConnectionSettingsForm } from "@/components/admin-external-connection-settings-form";
+import { AdminRawReportRetentionForm } from "@/components/admin-raw-report-retention-form";
 import { AppShell } from "@/components/app-shell";
 import { StorageGrowthTable } from "@/components/storage-growth-table";
 import {
@@ -24,6 +25,7 @@ import {
   getOperationsSummary,
   getPluginReportStats,
   getQueue,
+  getRawReportRetention,
 } from "@/lib/api";
 
 export const metadata = {
@@ -39,6 +41,9 @@ export const dynamic = "force-dynamic";
 type AdminPageProps = {
   searchParams: Promise<{
     view?: string;
+    rawPruned?: string;
+    rawBytes?: string;
+    rawCleanup?: string;
   }>;
 };
 
@@ -53,14 +58,15 @@ const adminViews: Array<{ id: AdminView; label: string }> = [
 ];
 
 export default async function AdminPage({ searchParams }: AdminPageProps) {
-  const { view } = await searchParams;
+  const { view, rawPruned, rawBytes, rawCleanup } = await searchParams;
   const activeView = parseAdminView(view);
   const needsOperations = activeView !== "external";
-  const [health, stats, queueJobs, retention, operations, reportStats, externalConnections] = await Promise.all([
+  const [health, stats, queueJobs, retention, rawRetention, operations, reportStats, externalConnections] = await Promise.all([
     activeView === "system" ? getHealth() : Promise.resolve(null),
     activeView === "overview" ? getFreshStats() : Promise.resolve(null),
     activeView === "queue" ? getQueue(20) : Promise.resolve([]),
     activeView === "system" ? getAuditFindingsRetention() : Promise.resolve(null),
+    activeView === "system" ? getRawReportRetention() : Promise.resolve(null),
     needsOperations ? getOperationsSummary() : Promise.resolve(null),
     getPluginReportStats(),
     activeView === "external" ? getExternalConnectionOperations() : Promise.resolve(null),
@@ -465,6 +471,56 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
             ) : null}
           </section>
 
+          {rawRetention ? (
+            <section className="rounded-md border border-line bg-surface">
+              <div className="flex flex-col gap-4 border-b border-line p-5 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-base font-semibold">Raw Report Retention</h2>
+                  <p className="mt-1 text-sm text-muted">
+                    Latest report per plugin plus {rawRetention.retentionDays.toLocaleString()} days of history
+                  </p>
+                </div>
+                <AdminRawReportRetentionForm
+                  eligibleReports={rawRetention.eligibleReports}
+                  batchSize={rawRetention.batchSize}
+                />
+              </div>
+
+              <dl className="grid sm:grid-cols-2 xl:grid-cols-4">
+                <RawRetentionMetric
+                  label="Stored reports"
+                  value={rawRetention.storedReports.toLocaleString()}
+                  detail={formatBytes(rawRetention.storedBytes)}
+                />
+                <RawRetentionMetric
+                  label="Latest protected"
+                  value={rawRetention.latestReports.toLocaleString()}
+                  detail="one per plugin"
+                />
+                <RawRetentionMetric
+                  label="Recent history"
+                  value={rawRetention.recentHistoricalReports.toLocaleString()}
+                  detail={`within ${rawRetention.retentionDays.toLocaleString()} days`}
+                />
+                <RawRetentionMetric
+                  label="Eligible"
+                  value={rawRetention.eligibleReports.toLocaleString()}
+                  detail={formatBytes(rawRetention.eligibleBytes)}
+                />
+              </dl>
+
+              {rawCleanup === "failed" ? (
+                <p className="border-t border-line px-5 py-3 text-sm text-risk">
+                  Cleanup failed. No retention result was recorded.
+                </p>
+              ) : rawPruned !== undefined ? (
+                <p className="border-t border-line px-5 py-3 text-sm text-muted">
+                  Removed raw JSON from {Number(rawPruned).toLocaleString()} reports and released {formatBytes(Number(rawBytes ?? 0))} for database reuse.
+                </p>
+              ) : null}
+            </section>
+          ) : null}
+
           {operations ? (
             <section className="rounded-md border border-line bg-surface p-5">
               <div className="flex items-center justify-between">
@@ -664,6 +720,24 @@ function MetricCard({
         {value}
       </p>
       <p className="mt-1 text-xs text-muted">{detail}</p>
+    </div>
+  );
+}
+
+function RawRetentionMetric({
+  label,
+  value,
+  detail,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+}) {
+  return (
+    <div className="border-b border-line px-5 py-4 last:border-b-0 sm:border-r sm:[&:nth-child(even)]:border-r-0 sm:[&:nth-child(n+3)]:border-b-0 xl:border-b-0 xl:[&:nth-child(even)]:border-r xl:last:border-r-0">
+      <dt className="text-xs font-medium uppercase text-muted">{label}</dt>
+      <dd className="mt-2 font-mono text-2xl font-semibold">{value}</dd>
+      <dd className="mt-1 text-xs text-muted">{detail}</dd>
     </div>
   );
 }

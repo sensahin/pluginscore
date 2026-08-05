@@ -31,7 +31,8 @@ Each scan job should persist:
 - plugin slug, version, download URL, source checksum, and WordPress.org metadata
 - plugin icon, banner, description, author, compatibility, rating, and support counts
 - Plugin Check version and scoring model version
-- raw JSON output in `audit_runs.raw_report_json`
+- raw JSON output in `audit_runs.raw_report_json`, retained for the latest audit
+  per plugin and recent historical audits only
 - stderr output
 - duration, exit code, timeout flag, and retry count
 - normalized finding code counts

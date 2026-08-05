@@ -406,8 +406,17 @@ create table if not exists audit_findings (
 
 create index if not exists audit_findings_code_idx on audit_findings(code);
 create index if not exists audit_findings_run_code_idx on audit_findings(audit_run_id, code);
+alter table audit_findings set (
+  autovacuum_vacuum_threshold = 5000,
+  autovacuum_vacuum_scale_factor = 0.02,
+  autovacuum_analyze_threshold = 5000,
+  autovacuum_analyze_scale_factor = 0.01
+);
 create index if not exists audit_runs_plugin_version_complete_idx
   on audit_runs(plugin_id, plugin_version, plugin_check_version, scoring_model_version)
+  where status = 'complete';
+create index if not exists audit_runs_plugin_complete_latest_idx
+  on audit_runs(plugin_id, completed_at desc nulls last, id desc)
   where status = 'complete';
 create index if not exists audit_runs_plugin_version_failure_idx
   on audit_runs(plugin_id, plugin_version, plugin_check_version, scoring_model_version, status, completed_at desc)
@@ -415,6 +424,14 @@ create index if not exists audit_runs_plugin_version_failure_idx
 create index if not exists audit_runs_plugin_version_latest_idx
   on audit_runs(plugin_id, plugin_version, completed_at desc nulls last, id desc)
   include (duration_ms);
+alter table audit_runs set (
+  autovacuum_vacuum_threshold = 250,
+  autovacuum_vacuum_scale_factor = 0.02,
+  autovacuum_analyze_threshold = 250,
+  autovacuum_analyze_scale_factor = 0.01,
+  toast.autovacuum_vacuum_threshold = 250,
+  toast.autovacuum_vacuum_scale_factor = 0.02
+);
 
 create table if not exists score_snapshots (
   id bigserial primary key,

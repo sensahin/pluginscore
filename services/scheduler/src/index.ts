@@ -115,6 +115,18 @@ async function syncOnce(cursors: SchedulerCursors) {
     );
   }
 
+  try {
+    const retention = await api.runRawReportRetention();
+
+    if (retention.prunedReports > 0) {
+      console.log(
+        `Raw-report retention pruned ${retention.prunedReports} reports; ${retention.eligibleReports} remain eligible.`,
+      );
+    }
+  } catch (error) {
+    console.error(`Raw-report retention failed: ${(error as Error).message}`);
+  }
+
   return {
     nextPopularCursor: nextCursor(cursors.popularCursor, config.batchSize, plugins.length),
     nextTrackedCursor,

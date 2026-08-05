@@ -50,6 +50,7 @@ export type {
   PluginTagRanking,
   QueueJob,
   RankValue,
+  RawReportRetentionSummary,
   ScanCompletePayload,
   ScanFailPayload,
   ScanJobDto,

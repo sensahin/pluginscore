@@ -300,6 +300,21 @@ export type AuditFindingsRetentionSummary = {
   estimatedReusableBytes: number;
 };
 
+export type RawReportRetentionSummary = {
+  policy: "latest_report_per_plugin_and_recent_history";
+  dryRun: boolean;
+  retentionDays: number;
+  batchSize: number;
+  storedReports: number;
+  latestReports: number;
+  recentHistoricalReports: number;
+  eligibleReports: number;
+  storedBytes: number;
+  eligibleBytes: number;
+  prunedReports: number;
+  prunedBytes: number;
+};
+
 export type OperationsVersionCount = {
   version: string;
   count: number;

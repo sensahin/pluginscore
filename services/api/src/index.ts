@@ -12,6 +12,8 @@ const store = createStore(config.databaseUrl, {
   ignoredPluginSlugs: config.ignoredPluginSlugs,
   pluginCheckVersion: config.pluginCheckVersion,
   externalConnectionAnalysisDisabled: config.externalConnectionAnalysisDisabled,
+  rawReportRetentionDays: config.rawReportRetentionDays,
+  rawReportRetentionBatchSize: config.rawReportRetentionBatchSize,
 });
 const server = await createServer(config, store);
 const storageSnapshotInterval = setInterval(() => {

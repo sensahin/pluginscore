@@ -15,6 +15,7 @@ import type {
   PluginReportUpdateInput,
   PluginSearchSummary,
   PluginScoreHistory,
+  RawReportRetentionSummary,
   ScanCompletePayload,
   ScanFailPayload,
   ScanJobDto,
@@ -133,6 +134,23 @@ export class MemoryStore implements PluginScoreStore {
       pluginsWithStaleFindings: 0,
       auditFindingsTableBytes: 0,
       estimatedReusableBytes: 0,
+    };
+  }
+
+  async rawReportRetention(dryRun: boolean): Promise<RawReportRetentionSummary> {
+    return {
+      policy: "latest_report_per_plugin_and_recent_history",
+      dryRun,
+      retentionDays: 30,
+      batchSize: 1000,
+      storedReports: 0,
+      latestReports: 0,
+      recentHistoricalReports: 0,
+      eligibleReports: 0,
+      storedBytes: 0,
+      eligibleBytes: 0,
+      prunedReports: 0,
+      prunedBytes: 0,
     };
   }
 

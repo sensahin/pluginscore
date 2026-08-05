@@ -1,4 +1,8 @@
-import type { TrackedPluginSummary, WordPressPluginMetadata } from "@pluginscore/core";
+import type {
+  RawReportRetentionSummary,
+  TrackedPluginSummary,
+  WordPressPluginMetadata,
+} from "@pluginscore/core";
 
 type EnqueueOptions = {
   reason: string;
@@ -88,6 +92,22 @@ export class PluginScoreApiClient {
     }
 
     return (await response.json()) as TrackedPluginSummary[];
+  }
+
+  async runRawReportRetention() {
+    const response = await fetch(new URL("/maintenance/raw-report-retention", this.baseUrl), {
+      method: "POST",
+      headers: this.requestHeaders(),
+      signal: AbortSignal.timeout(40_000),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `/maintenance/raw-report-retention failed: ${response.status} ${await response.text()}`,
+      );
+    }
+
+    return (await response.json()) as RawReportRetentionSummary;
   }
 
   private async fetchWithRetry(path: string, options: RequestInit = {}) {

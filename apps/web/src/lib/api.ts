@@ -22,6 +22,7 @@ import type {
   PluginScoreHistory,
   PluginSummary,
   QueueJob,
+  RawReportRetentionSummary,
   TagDetail,
   TagSummary,
   TrackedPluginSummary,
@@ -322,6 +323,44 @@ export async function getAuditFindingsRetention() {
       },
     },
   );
+}
+
+export async function getRawReportRetention() {
+  if (!internalApiToken) {
+    return null;
+  }
+
+  return fetchFromApi<RawReportRetentionSummary | null>(
+    "/maintenance/raw-report-retention",
+    null,
+    {
+      cache: "no-store",
+      headers: {
+        authorization: `Bearer ${internalApiToken}`,
+      },
+    },
+  );
+}
+
+export async function runRawReportRetention() {
+  if (!apiBaseUrl || !internalApiToken) {
+    throw new Error("Internal API is not configured.");
+  }
+
+  const response = await fetch(new URL("/maintenance/raw-report-retention", apiBaseUrl), {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${internalApiToken}`,
+    },
+    cache: "no-store",
+    signal: AbortSignal.timeout(40_000),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Raw-report cleanup failed: ${response.status}`);
+  }
+
+  return (await response.json()) as RawReportRetentionSummary;
 }
 
 export async function getOperationsSummary() {

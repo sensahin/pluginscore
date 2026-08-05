@@ -20,6 +20,8 @@ export type ApiConfig = {
   ignoredPluginSlugs: string[];
   pluginCheckVersion: string;
   externalConnectionAnalysisDisabled: boolean;
+  rawReportRetentionDays: number;
+  rawReportRetentionBatchSize: number;
 };
 
 export function getConfig(): ApiConfig {
@@ -46,6 +48,11 @@ export function getConfig(): ApiConfig {
     ignoredPluginSlugs: parsePluginSlugList(process.env.SCAN_IGNORED_PLUGIN_SLUGS),
     pluginCheckVersion: process.env.PLUGIN_CHECK_VERSION ?? "unknown",
     externalConnectionAnalysisDisabled: process.env.EXTERNAL_CONNECTION_ANALYSIS_DISABLED === "true",
+    rawReportRetentionDays: Number.parseInt(process.env.RAW_REPORT_RETENTION_DAYS ?? "30", 10),
+    rawReportRetentionBatchSize: Number.parseInt(
+      process.env.RAW_REPORT_RETENTION_BATCH_SIZE ?? "1000",
+      10,
+    ),
   };
 }
 

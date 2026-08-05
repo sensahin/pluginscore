@@ -11,6 +11,8 @@ export type StoreOptions = {
   ignoredPluginSlugs?: string[];
   pluginCheckVersion?: string;
   externalConnectionAnalysisDisabled?: boolean;
+  rawReportRetentionDays?: number;
+  rawReportRetentionBatchSize?: number;
 };
 
 export function createStore(databaseUrl?: string, options: StoreOptions = {}): PluginScoreStore {

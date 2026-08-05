@@ -3,9 +3,16 @@ set -euo pipefail
 
 LOG_DIR="${PLUGINSCORE_PRUNE_LOG_DIR:-/var/log/pluginscore}"
 LOG_FILE="${PLUGINSCORE_PRUNE_LOG:-$LOG_DIR/docker-prune.log}"
+LOCK_FILE="${PLUGINSCORE_PRUNE_LOCK:-/run/pluginscore-docker-prune.lock}"
 BUILDER_PRUNE_FILTER="${PLUGINSCORE_BUILDER_PRUNE_FILTER:-until=168h}"
 
 mkdir -p "$LOG_DIR"
+exec 9>"$LOCK_FILE"
+
+if ! flock -n 9; then
+  printf '[%s] Docker build-cache prune already running; skipping.\n' "$(date -Is)" | tee -a "$LOG_FILE"
+  exit 0
+fi
 
 args=(-af)
 if [[ "$BUILDER_PRUNE_FILTER" != "none" ]]; then

@@ -23,6 +23,7 @@ import type {
   PluginScoreHistory,
   PluginSummary,
   QueueJob,
+  RawReportRetentionSummary,
   ScanCompletePayload,
   ScanFailPayload,
   ScanJobDto,
@@ -155,6 +156,7 @@ export interface PluginScoreStore {
   health(): Promise<{ ok: true; mode: "memory" | "postgres" }>;
   stats(): Promise<ApiStats>;
   auditFindingsRetention(): Promise<AuditFindingsRetentionSummary>;
+  rawReportRetention(dryRun: boolean): Promise<RawReportRetentionSummary>;
   operationsSummary(): Promise<OperationsSummary>;
   captureStorageSnapshot(): Promise<void>;
   externalConnectionOperations(): Promise<ExternalConnectionOperations>;

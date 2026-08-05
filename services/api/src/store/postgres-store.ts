@@ -35,6 +35,7 @@ import type {
   PluginReportUpdateInput,
   PluginSummary,
   QueueJob,
+  RawReportRetentionSummary,
   ScanCompletePayload,
   ScanFailPayload,
   ScanJobDto,
@@ -89,6 +90,8 @@ export class PostgresStore implements PluginScoreStore {
   private ignoredPluginSlugs: Set<string>;
   private pluginCheckVersion: string;
   private externalConnectionAnalysisDisabled: boolean;
+  private rawReportRetentionDays: number;
+  private rawReportRetentionBatchSize: number;
 
   constructor(databaseUrl: string, options: StoreOptions = {}) {
     this.pool = new Pool({
@@ -110,6 +113,13 @@ export class PostgresStore implements PluginScoreStore {
     );
     this.pluginCheckVersion = options.pluginCheckVersion ?? "unknown";
     this.externalConnectionAnalysisDisabled = options.externalConnectionAnalysisDisabled ?? false;
+    this.rawReportRetentionDays = boundedInteger(options.rawReportRetentionDays, 30, 1, 3650);
+    this.rawReportRetentionBatchSize = boundedInteger(
+      options.rawReportRetentionBatchSize,
+      1000,
+      1,
+      5000,
+    );
   }
 
   async health() {
@@ -184,6 +194,120 @@ export class PostgresStore implements PluginScoreStore {
     );
 
     return rowToAuditFindingsRetentionSummary(result.rows[0] ?? {});
+  }
+
+  async rawReportRetention(dryRun: boolean): Promise<RawReportRetentionSummary> {
+    let prunedReports = 0;
+    let prunedBytes = 0;
+
+    if (!dryRun) {
+      const client = await this.pool.connect();
+
+      try {
+        await client.query("begin");
+        await client.query("set local statement_timeout = '30s'");
+        const pruneResult = await client.query(
+          `
+          with eligible as materialized (
+            select
+              ar.id,
+              pg_column_size(ar.raw_report_json)::bigint as report_bytes
+            from audit_runs ar
+            where ar.status = 'complete'
+              and ar.raw_report_json is not null
+              and coalesce(ar.completed_at, ar.created_at) < now() - make_interval(days => $1::integer)
+              and ar.id <> (
+                select latest.id
+                from audit_runs latest
+                where latest.plugin_id = ar.plugin_id
+                  and latest.status = 'complete'
+                order by latest.completed_at desc nulls last, latest.id desc
+                limit 1
+              )
+            order by ar.completed_at asc nulls first, ar.id asc
+            limit $2
+            for update of ar skip locked
+          ),
+          pruned as (
+            update audit_runs ar
+            set raw_report_json = null
+            from eligible
+            where ar.id = eligible.id
+            returning eligible.report_bytes
+          )
+          select
+            count(*)::integer as pruned_reports,
+            coalesce(sum(report_bytes), 0)::bigint as pruned_bytes
+          from pruned
+          `,
+          [this.rawReportRetentionDays, this.rawReportRetentionBatchSize],
+        );
+        await client.query("commit");
+        prunedReports = Number(pruneResult.rows[0]?.pruned_reports ?? 0);
+        prunedBytes = Number(pruneResult.rows[0]?.pruned_bytes ?? 0);
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      } finally {
+        client.release();
+      }
+    }
+
+    const previewResult = await this.pool.query(
+      `
+      with stored_reports as materialized (
+        select
+          ar.id,
+          coalesce(ar.completed_at, ar.created_at) as report_at,
+          pg_column_size(ar.raw_report_json)::bigint as report_bytes,
+          ar.id = (
+            select latest.id
+            from audit_runs latest
+            where latest.plugin_id = ar.plugin_id
+              and latest.status = 'complete'
+            order by latest.completed_at desc nulls last, latest.id desc
+            limit 1
+          ) as is_latest
+        from audit_runs ar
+        where ar.status = 'complete'
+          and ar.raw_report_json is not null
+      )
+      select
+        count(*)::integer as stored_reports,
+        count(*) filter (where is_latest)::integer as latest_reports,
+        count(*) filter (
+          where not is_latest
+            and report_at >= now() - make_interval(days => $1::integer)
+        )::integer as recent_historical_reports,
+        count(*) filter (
+          where not is_latest
+            and report_at < now() - make_interval(days => $1::integer)
+        )::integer as eligible_reports,
+        coalesce(sum(report_bytes), 0)::bigint as stored_bytes,
+        coalesce(sum(report_bytes) filter (
+          where not is_latest
+            and report_at < now() - make_interval(days => $1::integer)
+        ), 0)::bigint as eligible_bytes
+      from stored_reports
+      `,
+      [this.rawReportRetentionDays],
+    );
+    const row = previewResult.rows[0] ?? {};
+
+    return {
+      policy: "latest_report_per_plugin_and_recent_history",
+      dryRun,
+      retentionDays: this.rawReportRetentionDays,
+      batchSize: this.rawReportRetentionBatchSize,
+      storedReports: Number(row.stored_reports ?? 0),
+      latestReports: Number(row.latest_reports ?? 0),
+      recentHistoricalReports: Number(row.recent_historical_reports ?? 0),
+      eligibleReports: Number(row.eligible_reports ?? 0),
+      storedBytes: Number(row.stored_bytes ?? 0),
+      eligibleBytes: Number(row.eligible_bytes ?? 0),
+      prunedReports,
+      prunedBytes,
+    };
   }
 
   async operationsSummary(): Promise<OperationsSummary> {
@@ -4226,6 +4350,19 @@ function optionalNumber(value: unknown) {
 function optionalRoundedNumber(value: unknown) {
   const number = optionalNumber(value);
   return number === undefined ? undefined : Math.round(number);
+}
+
+function boundedInteger(
+  value: number | undefined,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+) {
+  if (!Number.isInteger(value)) {
+    return fallback;
+  }
+
+  return Math.min(maximum, Math.max(minimum, value as number));
 }
 
 function optionalIsoDate(value: unknown) {

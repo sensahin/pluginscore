@@ -376,6 +376,18 @@ export async function createServer(config: ApiConfig, store: PluginScoreStore) {
   );
 
   app.get(
+    "/maintenance/raw-report-retention",
+    { preHandler: requireInternalAuth },
+    async () => store.rawReportRetention(true),
+  );
+
+  app.post(
+    "/maintenance/raw-report-retention",
+    { preHandler: requireInternalAuth },
+    async () => store.rawReportRetention(false),
+  );
+
+  app.get(
     "/maintenance/operations",
     { preHandler: requireInternalAuth },
     async () => store.operationsSummary(),

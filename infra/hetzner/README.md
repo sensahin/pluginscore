@@ -98,6 +98,17 @@ containers, named volumes, or application data. Run it manually with
 `PLUGINSCORE_BUILDER_PRUNE_FILTER=none ./ops/pluginscore-docker-prune.sh` if the
 build cache needs to be reclaimed immediately.
 
+On a shared host where the broader swap and monitoring installer is not
+appropriate, install only the scoped build-cache timer:
+
+```bash
+cd /opt/pluginscore/infra/hetzner
+./ops/install-docker-prune-timer.sh
+```
+
+This timer runs weekly at low CPU and I/O priority, refuses overlapping runs,
+and only calls `docker builder prune` for unused cache older than seven days.
+
 ## Start The Top-1000 Backfill
 
 On the dedicated PluginScore backend host, after `infra/hetzner/.env` is set:
