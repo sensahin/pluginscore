@@ -5,6 +5,7 @@ import {
 } from "./category-page-view";
 
 export const revalidate = 43_200;
+export const dynamic = "force-static";
 
 type CategoryPageProps = {
   params: Promise<{ category: string }>;

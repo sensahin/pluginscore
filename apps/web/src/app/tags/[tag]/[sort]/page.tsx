@@ -7,6 +7,7 @@ import {
 } from "../tag-page-view";
 
 export const revalidate = 86_400;
+export const dynamic = "force-static";
 
 type TagSortPageProps = {
   params: Promise<{ tag: string; sort: string }>;

@@ -22,6 +22,7 @@ type CompareRouteProps = {
 };
 
 export const revalidate = 43_200;
+export const dynamic = "force-static";
 
 export async function generateMetadata({
   params,
